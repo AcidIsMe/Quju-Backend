@@ -33,7 +33,8 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional
     public Map<String, Object> register(String activityId, String userId, Map<String, Object> formData) {
-        ActivityEntity activity = activityMapper.selectById(activityId);
+        // 使用行锁（SELECT ... FOR UPDATE）防止并发超卖
+        ActivityEntity activity = activityMapper.selectByIdForUpdate(activityId);
         if (activity == null) {
             throw new BusinessException(40401, "活动不存在");
         }
@@ -79,9 +80,13 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional
     public void cancel(String activityId, String userId) {
-        ActivityEntity activity = activityMapper.selectById(activityId);
+        ActivityEntity activity = activityMapper.selectByIdForUpdate(activityId);
         if (activity == null) {
             throw new BusinessException(40401, "活动不存在");
+        }
+        // 检查是否超过报名截止时间
+        if (activity.getRegistrationDeadline() != null && activity.getRegistrationDeadline().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(40903, "已超过报名截止时间，无法取消报名");
         }
         RegistrationEntity registration = registrationMapper.selectOne(Wrappers.<RegistrationEntity>lambdaQuery()
                 .eq(RegistrationEntity::getActivityId, activityId)

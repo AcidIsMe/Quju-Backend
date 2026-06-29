@@ -67,6 +67,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public Map<String, Object> login(LoginReq req, String ipAddress) {
+        // 登录频率限制：15分钟内连续5次失败 → 锁定15分钟
+        LocalDateTime lockWindow = LocalDateTime.now().minusMinutes(15);
+        long recentFailures = loginAttemptMapper.selectList(Wrappers.<LoginAttemptEntity>lambdaQuery()
+                .eq(LoginAttemptEntity::getEmail, req.getEmail())
+                .eq(LoginAttemptEntity::getSuccess, false)
+                .ge(LoginAttemptEntity::getCreatedAt, lockWindow))
+                .size();
+        if (recentFailures >= 5) {
+            throw new BusinessException(42901, "密码错误次数过多，请 15 分钟后重试");
+        }
+
         UserEntity user = userMapper.selectOne(Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getEmail, req.getEmail()));
         boolean success = user != null && passwordEncoder.matches(req.getPassword(), user.getPasswordHash());
         LoginAttemptEntity attempt = new LoginAttemptEntity();
@@ -78,8 +89,11 @@ public class AuthServiceImpl implements AuthService {
         if (!success) {
             throw new BusinessException(40101, "邮箱或密码错误");
         }
+        if ("pending_activation".equals(user.getStatus())) {
+            throw new BusinessException(40102, "账户尚未激活，请先完成邮箱激活");
+        }
         if ("banned".equals(user.getStatus())) {
-            throw new BusinessException(40103, "账户已封禁");
+            throw new BusinessException(40103, "账户已被封禁，如有疑问请联系平台");
         }
 
         String accessToken = jwtTokenUtil.createAccessToken(user.getId(), user.getRole());

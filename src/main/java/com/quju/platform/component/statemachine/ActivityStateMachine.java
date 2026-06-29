@@ -6,11 +6,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class ActivityStateMachine {
 
-    public String submitForReview(String currentStatus) {
+    public String submitForReview(String currentStatus, Integer maxParticipants) {
         if (!"draft".equals(currentStatus) && !"rejected".equals(currentStatus)) {
             throw new BusinessException(40910, "当前状态不能提交审核");
         }
-        return "pending_manual_review";
+        if (maxParticipants != null && maxParticipants > 50) {
+            return "pending_manual_review";
+        }
+        return "pending_ai_review";
     }
 
     public String approve() {

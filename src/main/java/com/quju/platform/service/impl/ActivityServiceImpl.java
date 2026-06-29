@@ -44,6 +44,12 @@ public class ActivityServiceImpl implements ActivityService {
     @Override
     public ActivityEntity update(String id, ActivityCreateReq req, String userId) {
         ActivityEntity entity = detail(id);
+        if (!entity.getCreatorId().equals(userId)) {
+            throw new BusinessException(40300, "仅发起人可编辑活动");
+        }
+        if (!"draft".equals(entity.getStatus()) && !"rejected".equals(entity.getStatus())) {
+            throw new BusinessException(40910, "当前状态不可编辑");
+        }
         fill(entity, req);
         entity.setUpdatedAt(LocalDateTime.now());
         activityMapper.updateById(entity);
@@ -75,6 +81,9 @@ public class ActivityServiceImpl implements ActivityService {
     @Override
     public void deleteDraft(String id, String userId) {
         ActivityEntity entity = detail(id);
+        if (!entity.getCreatorId().equals(userId)) {
+            throw new BusinessException(40300, "仅发起人可删除活动");
+        }
         if (!"draft".equals(entity.getStatus())) {
             throw new BusinessException(40911, "仅草稿活动可删除");
         }
@@ -92,7 +101,7 @@ public class ActivityServiceImpl implements ActivityService {
     @Transactional
     public ActivityEntity submitForReview(String id) {
         ActivityEntity entity = detail(id);
-        entity.setStatus(stateMachine.submitForReview(entity.getStatus()));
+        entity.setStatus(stateMachine.submitForReview(entity.getStatus(), entity.getMaxParticipants()));
         activityMapper.updateById(entity);
         return entity;
     }

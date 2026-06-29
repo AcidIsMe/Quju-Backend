@@ -117,12 +117,15 @@ public class OpsAdminController {
     }
 
     @PostMapping("/activities/{id}/review")
-    public ApiResponse<ActivityEntity> reviewActivity(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ApiResponse<ActivityEntity> reviewActivity(@PathVariable String id,
+                                                      @RequestHeader(value = "X-User-Id", required = false) String adminId,
+                                                      @RequestBody Map<String, String> body) {
         ActivityEntity activity = activityMapper.selectById(id);
         if (activity != null) {
             String action = body.getOrDefault("action", "approve");
             activity.setStatus("approve".equals(action) ? activityStateMachine.approve() : activityStateMachine.reject());
             activity.setReviewReason(body.get("reason"));
+            activity.setReviewedBy(SecurityUtil.currentUserIdOr(adminId == null ? "admin" : adminId));
             activity.setReviewedAt(LocalDateTime.now());
             activityMapper.updateById(activity);
         }

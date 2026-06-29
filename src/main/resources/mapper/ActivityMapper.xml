@@ -18,4 +18,8 @@
         ORDER BY distance_meters ASC
         LIMIT #{limit}
     </select>
+
+    <select id="selectByIdForUpdate" resultType="com.quju.platform.entity.ActivityEntity">
+        SELECT * FROM activities WHERE id = #{id} FOR UPDATE
+    </select>
 </mapper>
