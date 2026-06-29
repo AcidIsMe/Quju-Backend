@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: quju-server
+
+  # ---- H2 内存数据库（开发/测试用，无需安装 MySQL）----
+  # 使用 H2 时注释掉下方 MySQL，取消注释这一段
+  # datasource:
+  #   url: "jdbc:h2:mem:quju;DB_CLOSE_DELAY=-1;MODE=MySQL"
+  #   driver-class-name: org.h2.Driver
+  #   username: sa
+  #   password:
+  # h2:
+  #   console:
+  #     enabled: true
+  #     path: /h2-console
+  # jpa:
+  #   hibernate:
+  #     ddl-auto: update
+  #   show-sql: true
+  #   properties:
+  #     hibernate:
+  #       format_sql: true
+
+  # ---- MySQL 配置 ----
+  datasource:
+    url: "jdbc:mysql://localhost:3306/quju?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&createDatabaseIfNotExist=true"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: Caesium137!
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+server:
+  port: 8080
