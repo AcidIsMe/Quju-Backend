@@ -1,18 +1,22 @@
 """
-趣聚 API 测试工具模块
+趣聚 API 测试工具模块 (适配 quju-zjq 后端)
 Usage: import test_utils as tu; tu.post(...); tu.assert_pass(...)
-"""
 
+关键变化:
+- 服务端端口: 3000, context-path: /api
+- ApiResponse 使用 .ok() 而非 .success()
+- 注册不返回 activation_token
+- 登录不检查 pending_activation 状态 (注册后可直接登录)
+"""
 import requests
 import json
 import time
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:3000/api"
 
 PASS = 0
 FAIL = 0
 
-# ---- 当前会话的登录态 ----
 _current_token = None
 _current_user = None
 
@@ -39,7 +43,9 @@ def delete(path, headers=None):
 
 def auth_header(token=None):
     t = token or _current_token
-    return {"Authorization": f"Bearer {t}"}
+    if t:
+        return {"Authorization": f"Bearer {t}"}
+    return {}
 
 
 def get_token():
@@ -52,8 +58,8 @@ def get_user():
 
 def login_as_new_user(prefix="testuser"):
     """
-    一键完成: 注册 → 激活 → 登录 → 返回 (token, user)
-    调用后自动设置全局 _current_token，后续测试直接用 auth_header() 即可
+    注册 -> 直接登录(无需激活) -> 返回 (token, user)
+    新后端 login 不检查 pending_activation 状态
     """
     global _current_token, _current_user
     ts = str(int(time.time() * 1000))[-8:]
@@ -61,27 +67,15 @@ def login_as_new_user(prefix="testuser"):
     nickname = f"{prefix}_{ts}"
     password = "Test1234"
 
-    # 1. 注册
-    resp = post("/api/auth/register/personal", {
+    resp = post("/auth/register/personal", {
         "email": email, "password": password, "nickname": nickname
     })
     body = resp.json()
     if body.get("code") != 0:
         print(f"  !! login_as_new_user: register failed - {body}")
         return None, None
-    activation_token = body["data"].get("activation_token")
-    if not activation_token:
-        print("  !! login_as_new_user: no activation_token in response")
-        return None, None
 
-    # 2. 激活
-    resp = get(f"/api/auth/activate/{activation_token}")
-    if resp.json().get("code") != 0:
-        print(f"  !! login_as_new_user: activate failed - {resp.json()}")
-        return None, None
-
-    # 3. 登录
-    resp = post("/api/auth/login", {"email": email, "password": password})
+    resp = post("/auth/login", {"email": email, "password": password})
     body = resp.json()
     if body.get("code") != 0:
         print(f"  !! login_as_new_user: login failed - {body}")
@@ -89,21 +83,40 @@ def login_as_new_user(prefix="testuser"):
 
     _current_token = body["data"]["access_token"]
     _current_user = body["data"]["user"]
-    print(f"  [auth] logged in as {_current_user['nickname']} (token={_current_token[:20]}...)")
+    print(f"  [auth] logged in as {_current_user['nickname']} (id={_current_user['id'][:8]}...)")
     return _current_token, _current_user
 
 
 def login_as_admin():
     """
-    管理员登录: admin@quju.com / Admin12345 (由 DataInitializer 创建)
-    返回 (token, user)
+    管理员登录。尝试 admin@quju.com / Admin12345。
+    如果不存在则先注册再登录。
     """
     global _current_token, _current_user
-    resp = post("/api/auth/login", {"email": "admin@quju.com", "password": "Admin12345"})
+
+    resp = post("/auth/login", {"email": "admin@quju.com", "password": "Admin12345"})
+    body = resp.json()
+
+    if body.get("code") == 0:
+        _current_token = body["data"]["access_token"]
+        _current_user = body["data"]["user"]
+        print(f"  [auth] admin logged in as {_current_user['nickname']} (role={_current_user['role']})")
+        return _current_token, _current_user
+
+    # 不存在则注册
+    resp = post("/auth/register/personal", {
+        "email": "admin@quju.com", "password": "Admin12345", "nickname": "AdminMaster"
+    })
+    if resp.json().get("code") != 0:
+        print(f"  !! login_as_admin: register failed - {resp.json()}")
+        return None, None
+
+    resp = post("/auth/login", {"email": "admin@quju.com", "password": "Admin12345"})
     body = resp.json()
     if body.get("code") != 0:
-        print(f"  !! login_as_admin: login failed - {body}")
+        print(f"  !! login_as_admin: login failed - {resp.json()}")
         return None, None
+
     _current_token = body["data"]["access_token"]
     _current_user = body["data"]["user"]
     print(f"  [auth] admin logged in as {_current_user['nickname']} (role={_current_user['role']})")
