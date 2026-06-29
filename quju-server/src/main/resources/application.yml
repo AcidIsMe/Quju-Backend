@@ -2,6 +2,9 @@ spring:
   application:
     name: quju-server
 
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
   # ---- H2 内存数据库（开发/测试用，无需安装 MySQL）----
   # 使用 H2 时注释掉下方 MySQL，取消注释这一段
   # datasource:

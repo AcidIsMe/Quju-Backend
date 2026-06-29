@@ -160,6 +160,10 @@ public class ActivityService {
         if ("draft".equals(req.getStatus())) {
             return "draft";
         }
+        // 允许直接发布（测试/管理用，正常流程走审核）
+        if ("published".equals(req.getStatus())) {
+            return "published";
+        }
         if (req.getMaxParticipants() != null && req.getMaxParticipants() > 50) {
             return "pending_manual_review";
         }

@@ -31,10 +31,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // 公开接口跳过认证
         if (path.startsWith("/api/auth/register") ||
             path.startsWith("/api/auth/login") ||
+            path.startsWith("/api/auth/logout") ||
             path.startsWith("/api/auth/activate") ||
             path.startsWith("/api/auth/resend-activation") ||
             path.startsWith("/api/auth/refresh") ||
             path.startsWith("/api/users/check-nickname") ||
+            (path.startsWith("/api/users/") && path.split("/").length == 4 && !path.contains("/me")) ||  // GET /api/users/{id}
+            path.startsWith("/api/discover") ||
+            (path.startsWith("/api/activities") && request.getMethod().equals("GET")) ||
             path.startsWith("/h2-console")) {
             chain.doFilter(request, response);
             return;
@@ -48,9 +52,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Optional<User> userOpt = userRepository.findById(userId);
                 if (userOpt.isPresent()) {
                     request.setAttribute("currentUser", userOpt.get());
+                    chain.doFilter(request, response);
+                    return;
                 }
             }
         }
-        chain.doFilter(request, response);
+
+        // 未通过认证，返回 401
+        response.setContentType("application/json;charset=UTF-8");
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.getWriter().write("{\"code\":40101,\"message\":\"请先登录\",\"data\":null}");
     }
 }

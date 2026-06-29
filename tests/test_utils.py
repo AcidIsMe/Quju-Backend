@@ -93,6 +93,23 @@ def login_as_new_user(prefix="testuser"):
     return _current_token, _current_user
 
 
+def login_as_admin():
+    """
+    管理员登录: admin@quju.com / Admin12345 (由 DataInitializer 创建)
+    返回 (token, user)
+    """
+    global _current_token, _current_user
+    resp = post("/api/auth/login", {"email": "admin@quju.com", "password": "Admin12345"})
+    body = resp.json()
+    if body.get("code") != 0:
+        print(f"  !! login_as_admin: login failed - {body}")
+        return None, None
+    _current_token = body["data"]["access_token"]
+    _current_user = body["data"]["user"]
+    print(f"  [auth] admin logged in as {_current_user['nickname']} (role={_current_user['role']})")
+    return _current_token, _current_user
+
+
 def assert_pass(test_name, resp, expected_code, msg_contains=None, data_keys=None):
     global PASS, FAIL
     try:
@@ -110,7 +127,7 @@ def assert_pass(test_name, resp, expected_code, msg_contains=None, data_keys=Non
 
         ok = True
         if code != expected_code:
-            print(f"  >> FAIL: expected code={expected_code} got code={code}")
+            print(f"  >> FAIL: expected code={expected_code}, got code={code}, msg={msg}")
             ok = False
         if msg_contains and msg_contains not in msg:
             print(f"  >> FAIL: msg does not contain '{msg_contains}'")
@@ -140,3 +157,9 @@ def print_summary():
     print(f"  Result: {PASS} passed, {FAIL} failed, {total} total")
     print(f"{'='*60}")
     return FAIL == 0
+
+
+def reset_stats():
+    global PASS, FAIL
+    PASS = 0
+    FAIL = 0

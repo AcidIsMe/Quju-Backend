@@ -25,6 +25,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(userId)
                 .claim("role", role)
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 7200_000)) // 2h
                 .signWith(accessKey)
@@ -34,6 +35,7 @@ public class JwtUtil {
     public String generateRefreshToken(String userId) {
         return Jwts.builder()
                 .subject(userId)
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 604800_000)) // 7d
                 .signWith(refreshKey)
