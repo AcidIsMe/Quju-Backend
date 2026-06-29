@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.quju.platform.mapper.ActivityMapper">
+
+    <select id="searchNearby" resultType="com.quju.platform.entity.ActivityEntity">
+        SELECT *,
+               (6371000 * 2 * ASIN(SQRT(
+                   POWER(SIN(RADIANS(location_lat - #{lat}) / 2), 2) +
+                   COS(RADIANS(#{lat})) * COS(RADIANS(location_lat)) *
+                   POWER(SIN(RADIANS(location_lng - #{lng}) / 2), 2)
+               ))) AS distance_meters
+        FROM activities
+        WHERE status = 'published'
+          AND location_lat IS NOT NULL
+          AND location_lng IS NOT NULL
+        HAVING distance_meters &lt;= #{radiusMeters}
+        ORDER BY distance_meters ASC
+        LIMIT #{limit}
+    </select>
+</mapper>
