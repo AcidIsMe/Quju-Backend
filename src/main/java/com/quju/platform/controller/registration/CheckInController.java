@@ -20,9 +20,8 @@ public class CheckInController {
 
     @PostMapping
     public ApiResponse<Void> checkIn(@PathVariable String activityId,
-                                     @RequestHeader(value = "X-User-Id", required = false) String userId,
                                      @Valid @RequestBody CheckInReq req) {
-        checkInService.checkIn(activityId, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId), req);
+        checkInService.checkIn(activityId, SecurityUtil.requireCurrentUserId(), req);
         return ApiResponse.ok("签到成功", null);
     }
 

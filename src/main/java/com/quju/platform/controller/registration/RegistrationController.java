@@ -17,16 +17,14 @@ public class RegistrationController {
 
     @PostMapping("/register")
     public ApiResponse<Map<String, Object>> register(@PathVariable String activityId,
-                                                     @RequestHeader(value = "X-User-Id", required = false) String userId,
                                                      @RequestBody(required = false) Map<String, Object> body) {
         Map<String, Object> formData = extractFormData(body);
-        return ApiResponse.ok(registrationService.register(activityId, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId), formData));
+        return ApiResponse.ok(registrationService.register(activityId, SecurityUtil.requireCurrentUserId(), formData));
     }
 
     @PostMapping("/cancel-registration")
-    public ApiResponse<Void> cancel(@PathVariable String activityId,
-                                    @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        registrationService.cancel(activityId, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId));
+    public ApiResponse<Void> cancel(@PathVariable String activityId) {
+        registrationService.cancel(activityId, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok("已取消报名", null);
     }
 

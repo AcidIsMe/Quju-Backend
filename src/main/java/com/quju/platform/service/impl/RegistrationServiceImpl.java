@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
+import java.util.Comparator;
 import java.util.Map;
 
 @Service
@@ -98,18 +99,76 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setStatus("cancelled");
         registration.setCancelledAt(LocalDateTime.now());
         registrationMapper.updateById(registration);
+
+        // 递减当前参与人数
         activity.setCurrentParticipants(Math.max(0, activity.getCurrentParticipants() - 1));
         activityMapper.updateById(activity);
+
+        // 自动递补：检查候补队列，取排位最前的用户进行递补
+        waitlistMapper.selectList(Wrappers.<WaitlistEntity>lambdaQuery()
+                        .eq(WaitlistEntity::getActivityId, activityId)
+                        .eq(WaitlistEntity::getStatus, "waiting")
+                        .orderByAsc(WaitlistEntity::getPosition))
+                .stream()
+                .findFirst()
+                .ifPresent(waitlistEntry -> {
+                    // 创建报名记录
+                    RegistrationEntity promotedReg = new RegistrationEntity();
+                    promotedReg.setActivityId(activityId);
+                    promotedReg.setUserId(waitlistEntry.getUserId());
+                    promotedReg.setStatus("registered");
+                    registrationMapper.insert(promotedReg);
+
+                    // 标记候补为已递补
+                    waitlistEntry.setStatus("promoted");
+                    waitlistEntry.setNotifiedAt(LocalDateTime.now());
+                    waitlistMapper.updateById(waitlistEntry);
+
+                    // 递增参与人数
+                    activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
+                    activityMapper.updateById(activity);
+                });
     }
 
     @Override
+    @Transactional
     public WaitlistEntity joinWaitlist(String activityId, String userId) {
+        ActivityEntity activity = activityMapper.selectByIdForUpdate(activityId);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+
+        // 严格校验：活动必须已满员
+        if (activity.getCurrentParticipants() < activity.getMaxParticipants()) {
+            throw new BusinessException(40905, "活动还有空余名额，请直接报名");
+        }
+
+        // 严格校验：用户不在已有等待队列中
+        long existingWaitlistCount = waitlistMapper.selectCount(Wrappers.<WaitlistEntity>lambdaQuery()
+                .eq(WaitlistEntity::getActivityId, activityId)
+                .eq(WaitlistEntity::getUserId, userId)
+                .eq(WaitlistEntity::getStatus, "waiting"));
+        if (existingWaitlistCount > 0) {
+            throw new BusinessException(40906, "您已在候补队列中");
+        }
+
+        // 用户已报名（且未取消）也不能加入候补
+        long existingRegistrationCount = registrationMapper.selectCount(Wrappers.<RegistrationEntity>lambdaQuery()
+                .eq(RegistrationEntity::getActivityId, activityId)
+                .eq(RegistrationEntity::getUserId, userId)
+                .ne(RegistrationEntity::getStatus, "cancelled"));
+        if (existingRegistrationCount > 0) {
+            throw new BusinessException(40902, "您已报名该活动，无需加入候补");
+        }
+
+        // 计算当前最大排位
         Integer maxPosition = waitlistMapper.selectList(Wrappers.<WaitlistEntity>lambdaQuery()
                         .eq(WaitlistEntity::getActivityId, activityId))
                 .stream()
                 .map(WaitlistEntity::getPosition)
                 .max(Integer::compareTo)
                 .orElse(0);
+
         WaitlistEntity waitlist = new WaitlistEntity();
         waitlist.setActivityId(activityId);
         waitlist.setUserId(userId);

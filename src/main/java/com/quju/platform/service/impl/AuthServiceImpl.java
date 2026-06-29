@@ -44,8 +44,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public Map<String, Object> registerPersonal(RegisterReq req) {
         UserEntity user = createUser(req.getEmail(), req.getPassword(), req.getNickname(), "personal");
-        createActivationToken(user.getId());
-        return Map.of("email", user.getEmail());
+        String token = createActivationToken(user.getId());
+        return Map.of("email", user.getEmail(), "activation_token", token);
     }
 
     @Override
@@ -60,8 +60,8 @@ public class AuthServiceImpl implements AuthService {
         profile.setLicenseImageUrl(req.getLicenseImageUrl());
         profile.setAuditStatus("pending");
         merchantProfileMapper.insert(profile);
-        createActivationToken(user.getId());
-        return Map.of("email", user.getEmail(), "audit_status", "pending");
+        String token = createActivationToken(user.getId());
+        return Map.of("email", user.getEmail(), "audit_status", "pending", "activation_token", token);
     }
 
     @Override
@@ -159,6 +159,14 @@ public class AuthServiceImpl implements AuthService {
     public void resendActivation(String email) {
         UserEntity user = userMapper.selectOne(Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getEmail, email));
         if (user != null && "pending_activation".equals(user.getStatus())) {
+            // 将旧的激活Token标记为已使用
+            activationTokenMapper.selectList(Wrappers.<ActivationTokenEntity>lambdaQuery()
+                            .eq(ActivationTokenEntity::getUserId, user.getId())
+                            .isNull(ActivationTokenEntity::getUsedAt))
+                    .forEach(t -> {
+                        t.setUsedAt(LocalDateTime.now());
+                        activationTokenMapper.updateById(t);
+                    });
             createActivationToken(user.getId());
         }
     }
@@ -193,11 +201,13 @@ public class AuthServiceImpl implements AuthService {
         return user;
     }
 
-    private void createActivationToken(String userId) {
+    private String createActivationToken(String userId) {
         ActivationTokenEntity activation = new ActivationTokenEntity();
+        String token = UUID.randomUUID().toString().replace("-", "");
         activation.setUserId(userId);
-        activation.setToken(UUID.randomUUID().toString().replace("-", ""));
+        activation.setToken(token);
         activation.setExpiresAt(LocalDateTime.now().plusHours(24));
         activationTokenMapper.insert(activation);
+        return token;
     }
 }

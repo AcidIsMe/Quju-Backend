@@ -51,10 +51,10 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 - JWT 生成与解析工具，Spring Security 无状态过滤器。
 - MyBatis-Plus 分页插件、Mapper XML、基础实体/Mapper/Service/Controller 分层。
 - 本地文件上传目录配置 `quju.files.upload-dir`。
+- 已实现强制 JWT 鉴权，URL 白名单 + 其余 authenticated()
 
 简化或占位：
 
-- 当前所有 HTTP 接口在 Spring Security 中 `permitAll`，JWT 只做解析，不做强制鉴权。
 - 多数需要“当前用户”的接口支持 `Authorization`，也支持开发期 `X-User-Id` 或默认 `dev-user`。
 - Redis、RabbitMQ、SMTP 邮件、真实 AI/CV/GIS SDK 均未接入，相关组件是本地占位实现。
 
@@ -89,8 +89,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 - 未发送真实激活邮件，当前只生成激活 token。
 - 商家注册当前使用 JSON DTO，不是文档中的 multipart/form-data 文件上传流程。
-- 登录失败会记录审计日志，但“5 分钟 5 次失败锁定 15 分钟”尚未实现。
-- 未强制阻止未激活用户登录；当前主要校验密码和封禁状态。
 
 ### 用户模块 Users
 
@@ -103,9 +101,7 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 简化或未实现：
 
-- `PATCH /api/users/me` 当前只处理 `nickname`、`bio` 等少量字段，未完整覆盖头像、性别、生日、兴趣标签。
-- 未实现敏感词过滤、公开资料统计、好友状态、关注状态。
-- 未实现 `GET /api/users/me/created-activities` 和 `GET /api/users/me/joined-activities`。
+- 未实现敏感词过滤、好友状态、关注状态。
 
 ### 活动模块 Activities
 
@@ -128,9 +124,7 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 简化或未实现：
 
-- 更新活动未限制“仅草稿或被驳回可编辑”。
-- 活动详情未聚合 creator、registration_status、display_status。
-- 未实现严格的创建者权限校验、人工审核权限校验、内容安全审核。
+- 未实现严格的人工审核权限校验、内容安全审核。
 - 活动状态机只覆盖基础状态流转。
 
 ### 活动发现 Discover
@@ -155,7 +149,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 - `recommended` 当前复用最新列表，没有兴趣标签推荐、报名人数排序。
 - 关键词搜索当前主要匹配 title/description，未实现标签命中优先级排序。
 - `map` 未实现可视区域边界框聚合点位，只是复用附近查询。
-- 未实现文档中的游标分页，当前主要使用 limit。
 
 ### 报名与候补 Registrations
 
@@ -175,7 +168,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 简化或未实现：
 
 - 未使用 `SELECT ... FOR UPDATE` 行锁，当前性能和并发安全不是重点。
-- 取消报名未限制“仅报名截止前可取消”。
 - 候补队列仅记录 FIFO 位置，未实现名额释放后的自动递补、TTL 通知、MQ 延迟队列。
 - 候补加入未严格校验“活动已满员且用户未在队列中”。
 
@@ -210,7 +202,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 - 未校验活动已结束、结束 7 天内、用户已签到。
 - 未聚合评价用户信息。
-- 未实现游标分页。
 
 ### 模板 Templates
 
@@ -315,7 +306,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 简化或未实现：
 
-- 未强制 `role=admin` 权限。
 - 用户封禁暂未处理 `expires_at` 自动解封。
 - 活动审核未接入 AI 审核结果和复杂工作流。
 - 小队停用未保存停用原因。

@@ -17,15 +17,13 @@ public class ImController {
     private final ImService imService;
 
     @PostMapping("/messages")
-    public ApiResponse<ImMessageEntity> send(@Valid @RequestBody ImMessageDto dto,
-                                             @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(imService.send(dto, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId)));
+    public ApiResponse<ImMessageEntity> send(@Valid @RequestBody ImMessageDto dto) {
+        return ApiResponse.ok(imService.send(dto, SecurityUtil.requireCurrentUserId()));
     }
 
     @PostMapping("/messages/{id}/recall")
-    public ApiResponse<Void> recall(@PathVariable String id,
-                                    @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        imService.recall(id, SecurityUtil.currentUserIdOr(userId));
+    public ApiResponse<Void> recall(@PathVariable String id) {
+        imService.recall(id, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 }

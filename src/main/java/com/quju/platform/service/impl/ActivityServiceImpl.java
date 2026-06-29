@@ -5,9 +5,11 @@ import com.quju.platform.component.statemachine.ActivityStateMachine;
 import com.quju.platform.dto.activity.ActivityCreateReq;
 import com.quju.platform.entity.ActivityEntity;
 import com.quju.platform.entity.RegistrationEntity;
+import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
+import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.ActivityService;
 import com.quju.platform.util.GeoJsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ import java.util.List;
 public class ActivityServiceImpl implements ActivityService {
 
     private final ActivityMapper activityMapper;
+    private final UserMapper userMapper;
     private final RegistrationMapper registrationMapper;
     private final ActivityStateMachine stateMachine;
 
@@ -63,6 +68,100 @@ public class ActivityServiceImpl implements ActivityService {
             throw new BusinessException(40401, "活动不存在");
         }
         return entity;
+    }
+
+    @Override
+    public Map<String, Object> detailWithAggregation(String id, String currentUserId) {
+        ActivityEntity entity = detail(id);
+
+        // 创建者信息
+        Map<String, Object> creator = null;
+        if (entity.getCreatorId() != null) {
+            UserEntity creatorEntity = userMapper.selectById(entity.getCreatorId());
+            if (creatorEntity != null) {
+                creator = Map.of(
+                        "id", creatorEntity.getId(),
+                        "nickname", creatorEntity.getNickname() == null ? "" : creatorEntity.getNickname(),
+                        "avatar_url", creatorEntity.getAvatarUrl() == null ? "" : creatorEntity.getAvatarUrl(),
+                        "credit_score", creatorEntity.getCreditScore() == null ? 0 : creatorEntity.getCreditScore()
+                );
+            }
+        }
+
+        // 当前用户报名状态
+        String registrationStatus = null;
+        if (currentUserId != null) {
+            RegistrationEntity reg = registrationMapper.selectOne(Wrappers.<RegistrationEntity>lambdaQuery()
+                    .eq(RegistrationEntity::getActivityId, id)
+                    .eq(RegistrationEntity::getUserId, currentUserId)
+                    .orderByDesc(RegistrationEntity::getCreatedAt)
+                    .last("LIMIT 1"));
+            if (reg != null) {
+                registrationStatus = reg.getStatus();
+            }
+        }
+
+        // 显示状态
+        String displayStatus = computeDisplayStatus(entity);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", entity.getId());
+        result.put("creator_id", entity.getCreatorId());
+        result.put("creator", creator);
+        result.put("title", entity.getTitle());
+        result.put("description", entity.getDescription());
+        result.put("tags", entity.getTags());
+        result.put("activity_type", entity.getActivityType());
+        result.put("cover_image_url", entity.getCoverImageUrl());
+        result.put("start_time", entity.getStartTime());
+        result.put("end_time", entity.getEndTime());
+        result.put("registration_deadline", entity.getRegistrationDeadline());
+        result.put("max_participants", entity.getMaxParticipants());
+        result.put("current_participants", entity.getCurrentParticipants());
+        result.put("min_credit_score", entity.getMinCreditScore());
+        result.put("min_age", entity.getMinAge());
+        result.put("fee_type", entity.getFeeType());
+        result.put("fee_amount", entity.getFeeAmount());
+        result.put("city", entity.getCity());
+        result.put("location_name", entity.getLocationName());
+        result.put("location_lat", entity.getLocationLat());
+        result.put("location_lng", entity.getLocationLng());
+        result.put("status", entity.getStatus());
+        result.put("display_status", displayStatus);
+        result.put("registration_status", registrationStatus);
+        result.put("ai_review_result", entity.getAiReviewResult());
+        result.put("review_reason", entity.getReviewReason());
+        result.put("is_team_activity", entity.getTeamActivity());
+        result.put("team_id", entity.getTeamId());
+        result.put("cloned_from_id", entity.getClonedFromId());
+        result.put("check_in_enabled", entity.getCheckInEnabled());
+        result.put("create_at", entity.getCreatedAt());
+        result.put("updated_at", entity.getUpdatedAt());
+
+        return result;
+    }
+
+    private String computeDisplayStatus(ActivityEntity entity) {
+        String status = entity.getStatus();
+        if (status == null) return "unknown";
+        return switch (status) {
+            case "draft" -> "draft";
+            case "pending_ai_review", "pending_manual_review" -> "pending_review";
+            case "rejected" -> "rejected";
+            case "published" -> {
+                LocalDateTime now = LocalDateTime.now();
+                if (entity.getEndTime() != null && now.isAfter(entity.getEndTime())) {
+                    yield "ended";
+                } else if (entity.getStartTime() != null && now.isAfter(entity.getStartTime())) {
+                    yield "ongoing";
+                }
+                yield "upcoming";
+            }
+            case "taken_down" -> "taken_down";
+            case "cancelled" -> "cancelled";
+            case "closed" -> "closed";
+            default -> status;
+        };
     }
 
     @Override

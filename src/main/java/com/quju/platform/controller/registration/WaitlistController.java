@@ -17,16 +17,14 @@ public class WaitlistController {
     private final RegistrationService registrationService;
 
     @PostMapping("/join-waitlist")
-    public ApiResponse<Map<String, Object>> join(@PathVariable String activityId,
-                                                 @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        WaitlistEntity item = registrationService.joinWaitlist(activityId, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId));
+    public ApiResponse<Map<String, Object>> join(@PathVariable String activityId) {
+        WaitlistEntity item = registrationService.joinWaitlist(activityId, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok(Map.of("position", item.getPosition(), "waiting_count_ahead", Math.max(0, item.getPosition() - 1)));
     }
 
     @DeleteMapping("/leave-waitlist")
-    public ApiResponse<Void> leave(@PathVariable String activityId,
-                                   @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        registrationService.leaveWaitlist(activityId, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId));
+    public ApiResponse<Void> leave(@PathVariable String activityId) {
+        registrationService.leaveWaitlist(activityId, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 }

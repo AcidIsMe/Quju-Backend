@@ -21,11 +21,10 @@ public class ReviewController {
 
     @PostMapping
     public ApiResponse<ReviewEntity> create(@PathVariable String activityId,
-                                            @RequestHeader(value = "X-User-Id", required = false) String userId,
                                             @RequestBody Map<String, String> body) {
         ReviewEntity review = new ReviewEntity();
         review.setActivityId(activityId);
-        review.setUserId(SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId));
+        review.setUserId(SecurityUtil.requireCurrentUserId());
         review.setContent(body.get("content"));
         reviewMapper.insert(review);
         return ApiResponse.ok(review);
