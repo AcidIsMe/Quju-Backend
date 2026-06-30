@@ -9,4 +9,5 @@ public interface DiscoveryService {
     CursorPage<ActivityEntity> recommended(ActivityQueryReq req);
     CursorPage<ActivityEntity> search(ActivityQueryReq req);
     CursorPage<ActivityEntity> nearby(ActivityQueryReq req);
+    CursorPage<ActivityEntity> mapBox(ActivityQueryReq req);
 }

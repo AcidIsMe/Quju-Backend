@@ -15,4 +15,19 @@ public interface ActivityMapper extends BaseMapper<ActivityEntity> {
                                       @Param("limit") Integer limit);
 
     ActivityEntity selectByIdForUpdate(@Param("id") String id);
+
+    /** 关键词搜索（按相关度排序：标题 > 标签 > 简介 > 发布时间） */
+    List<ActivityEntity> searchWithRelevance(@Param("q") String q,
+                                             @Param("city") String city,
+                                             @Param("feeType") String feeType,
+                                             @Param("startAfter") String startAfter,
+                                             @Param("startBefore") String startBefore,
+                                             @Param("limit") Integer limit);
+
+    /** 地图边界框查询 + 轻量数据 */
+    List<ActivityEntity> searchMapBox(@Param("swLat") BigDecimal swLat,
+                                      @Param("swLng") BigDecimal swLng,
+                                      @Param("neLat") BigDecimal neLat,
+                                      @Param("neLng") BigDecimal neLng,
+                                      @Param("limit") Integer limit);
 }
