@@ -3,8 +3,11 @@ package com.quju.platform.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.entity.FollowEntity;
 import com.quju.platform.entity.FriendshipEntity;
+import com.quju.platform.entity.UserEntity;
 import com.quju.platform.mapper.FollowMapper;
 import com.quju.platform.mapper.FriendshipMapper;
+import com.quju.platform.mapper.UserMapper;
+import com.quju.platform.service.NotificationService;
 import com.quju.platform.service.SocialGraphService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,8 @@ public class SocialGraphServiceImpl implements SocialGraphService {
 
     private final FriendshipMapper friendshipMapper;
     private final FollowMapper followMapper;
+    private final UserMapper userMapper;
+    private final NotificationService notificationService;
 
     @Override
     public Map<String, Object> requestFriend(String userId, String targetUserId) {
@@ -29,6 +34,18 @@ public class SocialGraphServiceImpl implements SocialGraphService {
         friendship.setActionUserId(userId);
         friendship.setGroupTags(List.of());
         friendshipMapper.insert(friendship);
+
+        // 发送好友请求通知
+        UserEntity requester = userMapper.selectById(userId);
+        String nickname = requester != null ? requester.getNickname() : "未知用户";
+        notificationService.notify(
+                targetUserId,
+                "friend_request",
+                "好友请求",
+                nickname + " 请求添加你为好友",
+                Map.of("request_id", friendship.getId(), "from_user_id", userId, "from_nickname", nickname)
+        );
+
         return Map.of("request_id", friendship.getId(), "status", friendship.getStatus());
     }
 

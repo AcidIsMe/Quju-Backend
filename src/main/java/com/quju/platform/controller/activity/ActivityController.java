@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/activities")
@@ -20,31 +21,28 @@ public class ActivityController {
     private final ActivityService activityService;
 
     @PostMapping
-    public ApiResponse<ActivityEntity> create(@Valid @RequestBody ActivityCreateReq req,
-                                              @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(activityService.create(req, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId)));
+    public ApiResponse<ActivityEntity> create(@Valid @RequestBody ActivityCreateReq req) {
+        return ApiResponse.ok(activityService.create(req, SecurityUtil.requireCurrentUserId()));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ActivityEntity> update(@PathVariable String id, @Valid @RequestBody ActivityCreateReq req,
-                                              @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(activityService.update(id, req, SecurityUtil.currentUserIdOr(userId)));
+    public ApiResponse<ActivityEntity> update(@PathVariable String id, @Valid @RequestBody ActivityCreateReq req) {
+        return ApiResponse.ok(activityService.update(id, req, SecurityUtil.requireCurrentUserId()));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<ActivityEntity> detail(@PathVariable String id) {
-        return ApiResponse.ok(activityService.detail(id));
+    public ApiResponse<Map<String, Object>> detail(@PathVariable String id) {
+        return ApiResponse.ok(activityService.detailWithAggregation(id, SecurityUtil.getCurrentUserIdOrNull()));
     }
 
     @PostMapping("/{id}/clone")
-    public ApiResponse<ActivityEntity> cloneActivity(@PathVariable String id,
-                                                     @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(activityService.cloneActivity(id, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId)));
+    public ApiResponse<ActivityEntity> cloneActivity(@PathVariable String id) {
+        return ApiResponse.ok(activityService.cloneActivity(id, SecurityUtil.requireCurrentUserId()));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable String id, @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        activityService.deleteDraft(id, SecurityUtil.currentUserIdOr(userId));
+    public ApiResponse<Void> delete(@PathVariable String id) {
+        activityService.deleteDraft(id, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 

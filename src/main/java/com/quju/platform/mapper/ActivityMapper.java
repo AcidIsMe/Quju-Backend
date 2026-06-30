@@ -13,4 +13,6 @@ public interface ActivityMapper extends BaseMapper<ActivityEntity> {
                                       @Param("lng") BigDecimal lng,
                                       @Param("radiusMeters") Integer radiusMeters,
                                       @Param("limit") Integer limit);
+
+    ActivityEntity selectByIdForUpdate(@Param("id") String id);
 }

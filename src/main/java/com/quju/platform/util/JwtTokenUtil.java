@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class JwtTokenUtil {
@@ -32,7 +33,9 @@ public class JwtTokenUtil {
     }
 
     public String createRefreshToken(String userId) {
-        return createToken(userId, Map.of("type", "refresh"), refreshTokenTtlSeconds);
+        return createToken(userId, Map.of(
+                "type", "refresh",
+                "jti", UUID.randomUUID().toString()), refreshTokenTtlSeconds);
     }
 
     public String createToken(String subject, Map<String, Object> claims, long ttlSeconds) {
@@ -40,6 +43,7 @@ public class JwtTokenUtil {
         return Jwts.builder()
                 .subject(subject)
                 .claims(claims)
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(ttlSeconds)))
                 .signWith(secretKey)

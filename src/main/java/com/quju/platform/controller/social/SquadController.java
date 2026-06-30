@@ -20,9 +20,8 @@ public class SquadController {
     private final SquadService squadService;
 
     @PostMapping
-    public ApiResponse<TeamEntity> create(@Valid @RequestBody SquadCreateReq req,
-                                          @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(squadService.create(req, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId)));
+    public ApiResponse<TeamEntity> create(@Valid @RequestBody SquadCreateReq req) {
+        return ApiResponse.ok(squadService.create(req, SecurityUtil.requireCurrentUserId()));
     }
 
     @GetMapping
@@ -37,15 +36,13 @@ public class SquadController {
     }
 
     @PostMapping("/{id}/join")
-    public ApiResponse<Map<String, Object>> join(@PathVariable String id,
-                                                 @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ApiResponse.ok(squadService.join(id, SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId)));
+    public ApiResponse<Map<String, Object>> join(@PathVariable String id) {
+        return ApiResponse.ok(squadService.join(id, SecurityUtil.requireCurrentUserId()));
     }
 
     @PostMapping("/{id}/dissolve")
-    public ApiResponse<Void> dissolve(@PathVariable String id,
-                                      @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        squadService.dissolve(id, SecurityUtil.currentUserIdOr(userId));
+    public ApiResponse<Void> dissolve(@PathVariable String id) {
+        squadService.dissolve(id, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 }

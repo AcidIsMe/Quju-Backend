@@ -48,12 +48,11 @@ public class OpsAdminController {
 
     @PostMapping("/users/{id}/ban")
     public ApiResponse<Void> ban(@PathVariable String id,
-                                 @RequestHeader(value = "X-User-Id", required = false) String adminId,
                                  @RequestBody Map<String, String> body) {
         UserBanEntity ban = new UserBanEntity();
         ban.setUserId(id);
         ban.setReason(body.getOrDefault("reason", "违规"));
-        ban.setBannedBy(SecurityUtil.currentUserIdOr(adminId == null ? "admin" : adminId));
+        ban.setBannedBy(SecurityUtil.requireCurrentUserId());
         ban.setBannedAt(LocalDateTime.now());
         ban.setActive(true);
         userBanMapper.insert(ban);
@@ -66,14 +65,13 @@ public class OpsAdminController {
     }
 
     @PostMapping("/users/{id}/unban")
-    public ApiResponse<Void> unban(@PathVariable String id,
-                                   @RequestHeader(value = "X-User-Id", required = false) String adminId) {
+    public ApiResponse<Void> unban(@PathVariable String id) {
         userBanMapper.selectList(Wrappers.<UserBanEntity>lambdaQuery()
                         .eq(UserBanEntity::getUserId, id)
                         .eq(UserBanEntity::getActive, true))
                 .forEach(ban -> {
                     ban.setActive(false);
-                    ban.setRevokedBy(SecurityUtil.currentUserIdOr(adminId == null ? "admin" : adminId));
+                    ban.setRevokedBy(SecurityUtil.requireCurrentUserId());
                     ban.setRevokedAt(LocalDateTime.now());
                     userBanMapper.updateById(ban);
                 });
@@ -92,17 +90,15 @@ public class OpsAdminController {
     }
 
     @PostMapping("/merchants/{id}/approve")
-    public ApiResponse<Void> approveMerchant(@PathVariable String id,
-                                             @RequestHeader(value = "X-User-Id", required = false) String adminId) {
-        merchantService.approve(id, SecurityUtil.currentUserIdOr(adminId == null ? "admin" : adminId));
+    public ApiResponse<Void> approveMerchant(@PathVariable String id) {
+        merchantService.approve(id, SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 
     @PostMapping("/merchants/{id}/reject")
     public ApiResponse<Void> rejectMerchant(@PathVariable String id,
-                                            @RequestHeader(value = "X-User-Id", required = false) String adminId,
                                             @RequestBody Map<String, String> body) {
-        merchantService.reject(id, body.get("reason"), SecurityUtil.currentUserIdOr(adminId == null ? "admin" : adminId));
+        merchantService.reject(id, body.get("reason"), SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok();
     }
 
@@ -117,12 +113,15 @@ public class OpsAdminController {
     }
 
     @PostMapping("/activities/{id}/review")
-    public ApiResponse<ActivityEntity> reviewActivity(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ApiResponse<ActivityEntity> reviewActivity(@PathVariable String id,
+                                                      @RequestBody Map<String, String> body) {
+        String adminId = SecurityUtil.requireCurrentUserId();
         ActivityEntity activity = activityMapper.selectById(id);
         if (activity != null) {
             String action = body.getOrDefault("action", "approve");
             activity.setStatus("approve".equals(action) ? activityStateMachine.approve() : activityStateMachine.reject());
             activity.setReviewReason(body.get("reason"));
+            activity.setReviewedBy(adminId);
             activity.setReviewedAt(LocalDateTime.now());
             activityMapper.updateById(activity);
         }

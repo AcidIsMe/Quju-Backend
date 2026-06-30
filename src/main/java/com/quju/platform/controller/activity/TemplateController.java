@@ -35,14 +35,13 @@ public class TemplateController {
     }
 
     @PostMapping("/{id}/use")
-    public ApiResponse<ActivityEntity> use(@PathVariable String id,
-                                           @RequestHeader(value = "X-User-Id", required = false) String userId) {
+    public ApiResponse<ActivityEntity> use(@PathVariable String id) {
         ActivityTemplateEntity template = templateMapper.selectById(id);
         if (template == null) {
             throw new BusinessException(40406, "模板不存在");
         }
         ActivityEntity activity = new ActivityEntity();
-        activity.setCreatorId(SecurityUtil.currentUserIdOr(userId == null ? "dev-user" : userId));
+        activity.setCreatorId(SecurityUtil.requireCurrentUserId());
         activity.setTitle(template.getName());
         activity.setDescription(template.getDescription() == null ? "" : template.getDescription());
         activity.setTags(template.getTags());
