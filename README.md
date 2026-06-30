@@ -146,9 +146,7 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 简化或未实现：
 
-- `recommended` 当前复用最新列表，没有兴趣标签推荐、报名人数排序。
 - 关键词搜索当前主要匹配 title/description，未实现标签命中优先级排序。
-- `map` 未实现可视区域边界框聚合点位，只是复用附近查询。
 
 ### 报名与候补 Registrations
 
@@ -200,7 +198,6 @@ java -jar target/quju-platform-0.0.1-SNAPSHOT.jar
 
 简化或未实现：
 
-- 未校验活动已结束、结束 7 天内、用户已签到。
 - 未聚合评价用户信息。
 
 ### 模板 Templates
