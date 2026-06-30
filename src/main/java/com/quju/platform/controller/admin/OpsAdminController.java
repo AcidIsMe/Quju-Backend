@@ -30,6 +30,31 @@ public class OpsAdminController {
     private final TeamMapper teamMapper;
     private final ActivityStateMachine activityStateMachine;
 
+    @GetMapping("/dashboard")
+    public ApiResponse<Map<String, Object>> dashboard() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("users", userMapper.selectCount(Wrappers.<UserEntity>lambdaQuery()));
+        stats.put("activities", activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()));
+        stats.put("pending_reviews", activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
+                .in(ActivityEntity::getStatus, List.of("pending_ai_review", "pending_manual_review"))));
+        stats.put("merchants", merchantProfileMapper.selectCount(Wrappers.<MerchantProfileEntity>lambdaQuery()));
+        stats.put("pending_merchants", merchantProfileMapper.selectCount(Wrappers.<MerchantProfileEntity>lambdaQuery()
+                .eq(MerchantProfileEntity::getAuditStatus, "pending")));
+
+        List<Map<String, Object>> recentActivities = activityMapper.selectList(Wrappers.<ActivityEntity>lambdaQuery()
+                        .orderByDesc(ActivityEntity::getCreatedAt)
+                        .orderByDesc(ActivityEntity::getId)
+                        .last("LIMIT 5"))
+                .stream()
+                .map(this::dashboardActivityItem)
+                .toList();
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("stats", stats);
+        data.put("recent_activities", recentActivities);
+        return ApiResponse.ok(data);
+    }
+
     @GetMapping("/users")
     public ApiResponse<List<Map<String, Object>>> users(@RequestParam(required = false) String q,
                                                         @RequestParam(required = false) String role,
@@ -260,6 +285,20 @@ public class OpsAdminController {
             creatorItem.put("avatar_url", creator.getAvatarUrl());
         }
         item.put("creator", creator == null ? null : creatorItem);
+        return item;
+    }
+
+    private Map<String, Object> dashboardActivityItem(ActivityEntity activity) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", activity.getId());
+        item.put("title", activity.getTitle());
+        item.put("status", activity.getStatus());
+        item.put("created_at", activity.getCreatedAt());
+        UserEntity creator = activity.getCreatorId() == null ? null : userMapper.selectById(activity.getCreatorId());
+        item.put("creator", creator == null ? null : Map.of(
+                "id", creator.getId(),
+                "nickname", creator.getNickname() == null ? "" : creator.getNickname()
+        ));
         return item;
     }
 
