@@ -1,5 +1,5 @@
 server:
-  port: 3000
+  port: 3002
   servlet:
     context-path: /api
 
@@ -14,7 +14,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/quju_platform?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: ${MYSQL_USERNAME:root}
-    password: ${MYSQL_PASSWORD:sr20041103}
+    password: ${MYSQL_PASSWORD:lsy040628}
   sql:
     init:
       mode: always
