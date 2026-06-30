@@ -4,3 +4,4 @@ uploads/
 *.iml
 *.log
 .DS_Store
+.bitfun/

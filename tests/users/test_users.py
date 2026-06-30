@@ -45,19 +45,18 @@ def test_nickname_conflict():
 
     login_as_new_user("userB")
     resp = patch("/users/me", {"nickname": new_nick}, headers=auth_header())
-    # 后端 bug: UserController 未预检查昵称唯一性，直接 update 触发 DB 约束异常 (50000)
-    assert_pass("US03-5 昵称不可重复", resp, 50000)
+    # BUG-002 已修复：UserController 现在预检查昵称唯一性，返回 40003
+    assert_pass("US03-5 昵称不可重复(BUG002已修复40003)", resp, 40003)
 
 
 def test_public_profile():
     """查看用户公开信息"""
     token, user = login_as_new_user("pubprof")
-    resp = get(f"/users/{user['id']}")
+    resp = get(f"/users/{user['id']}", headers=auth_header())
     assert_pass("US03-6 查看公开信息", resp, 0, data_keys=["id", "nickname"])
 
-    resp = get("/users/fake-id-12345")
-    # 后端返回 code=0, data=null 对于不存在的用户
-    assert_pass("US03-7 不存在用户返回null", resp, 0, data_keys=None)
+    resp = get("/users/fake-id-12345", headers=auth_header())
+    assert_pass("US03-7 不存在用户返回40401", resp, 40401)
 
 
 def test_check_nickname():

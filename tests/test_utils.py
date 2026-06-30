@@ -58,8 +58,7 @@ def get_user():
 
 def login_as_new_user(prefix="testuser"):
     """
-    注册 -> 直接登录(无需激活) -> 返回 (token, user)
-    新后端 login 不检查 pending_activation 状态
+    注册 → 激活 → 登录 → 返回 (token, user)
     """
     global _current_token, _current_user
     ts = str(int(time.time() * 1000))[-8:]
@@ -67,6 +66,7 @@ def login_as_new_user(prefix="testuser"):
     nickname = f"{prefix}_{ts}"
     password = "Test1234"
 
+    # 1. 注册
     resp = post("/auth/register/personal", {
         "email": email, "password": password, "nickname": nickname
     })
@@ -75,6 +75,15 @@ def login_as_new_user(prefix="testuser"):
         print(f"  !! login_as_new_user: register failed - {body}")
         return None, None
 
+    # 2. 激活（新版本注册返回 activation_token）
+    activation_token = body["data"].get("activation_token")
+    if activation_token:
+        resp = get(f"/auth/activate/{activation_token}")
+        if resp.json().get("code") != 0:
+            print(f"  !! login_as_new_user: activate failed - {resp.json()}")
+            return None, None
+
+    # 3. 登录
     resp = post("/auth/login", {"email": email, "password": password})
     body = resp.json()
     if body.get("code") != 0:
@@ -89,8 +98,9 @@ def login_as_new_user(prefix="testuser"):
 
 def login_as_admin():
     """
-    管理员登录。尝试 admin@quju.com / Admin12345。
-    如果不存在则先注册再登录。
+    管理员登录: admin@quju.com / Admin12345
+    如果存在但未激活，先激活再登录
+    如果不存在，注册、激活、登录
     """
     global _current_token, _current_user
 
@@ -103,18 +113,32 @@ def login_as_admin():
         print(f"  [auth] admin logged in as {_current_user['nickname']} (role={_current_user['role']})")
         return _current_token, _current_user
 
-    # 不存在则注册
+    code = body.get("code")
+    if code == 40102:  # 未激活
+        # 先注册获取 token（已有账号会失败）→ 用 resend 重新获取
+        resp = post("/auth/resend-activation", {"email": "admin@quju.com"})
+        # 无法直接获取 token，尝试重新注册
+        pass
+
+    # 注册（如果已存在则失败，可能是未激活状态）
     resp = post("/auth/register/personal", {
         "email": "admin@quju.com", "password": "Admin12345", "nickname": "AdminMaster"
     })
-    if resp.json().get("code") != 0:
-        print(f"  !! login_as_admin: register failed - {resp.json()}")
+    body = resp.json()
+    if body.get("code") == 40001:  # 已存在
+        # 尝试通过 resend 触发新激活令牌（token 无法获取）
+        # 直接 fallback: 用注册返回的 token 无法拿，跳过 admin 测试需要手动激活
+        print(f"  !! login_as_admin: admin exists but needs activation. Manually activate it first.")
         return None, None
+
+    activation_token = body["data"].get("activation_token")
+    if activation_token:
+        get(f"/auth/activate/{activation_token}")
 
     resp = post("/auth/login", {"email": "admin@quju.com", "password": "Admin12345"})
     body = resp.json()
     if body.get("code") != 0:
-        print(f"  !! login_as_admin: login failed - {resp.json()}")
+        print(f"  !! login_as_admin: login failed - {body}")
         return None, None
 
     _current_token = body["data"]["access_token"]

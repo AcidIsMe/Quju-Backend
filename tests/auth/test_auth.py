@@ -30,12 +30,14 @@ def test_register():
 
 
 def test_login():
-    """登录流程"""
+    """登录流程（需先激活）"""
     email = f"login_{_ts}@example.com"
-    post("/auth/register/personal", {"email": email, "password": "Login1234", "nickname": f"LoginUser_{_ts}"})
+    resp = post("/auth/register/personal", {"email": email, "password": "Login1234", "nickname": f"LoginUser_{_ts}"})
+    token = resp.json()["data"]["activation_token"]
+    get(f"/auth/activate/{token}")
 
     resp = post("/auth/login", {"email": email, "password": "Login1234"})
-    body = assert_pass("US02-1 注册后可直接登录", resp, 0, data_keys=["access_token", "refresh_token", "user"])
+    body = assert_pass("US02-1 激活后登录成功", resp, 0, data_keys=["access_token", "refresh_token", "user"])
 
     resp = post("/auth/login", {"email": email, "password": "WrongPW12"})
     assert_pass("US02-2 错误密码拒绝(40101)", resp, 40101)
@@ -47,7 +49,9 @@ def test_login():
 def test_token_refresh():
     """Token 刷新"""
     email = f"refresh_{_ts}@example.com"
-    post("/auth/register/personal", {"email": email, "password": "Test1234", "nickname": f"Refresh_{_ts}"})
+    resp = post("/auth/register/personal", {"email": email, "password": "Test1234", "nickname": f"Refresh_{_ts}"})
+    token = resp.json()["data"]["activation_token"]
+    get(f"/auth/activate/{token}")
     resp = post("/auth/login", {"email": email, "password": "Test1234"})
     refresh_token = resp.json()["data"]["refresh_token"]
 
@@ -63,7 +67,9 @@ def test_token_refresh():
 def test_logout():
     """退出登录"""
     email = f"logout_{_ts}@example.com"
-    post("/auth/register/personal", {"email": email, "password": "Test1234", "nickname": f"Logout_{_ts}"})
+    resp = post("/auth/register/personal", {"email": email, "password": "Test1234", "nickname": f"Logout_{_ts}"})
+    token = resp.json()["data"]["activation_token"]
+    get(f"/auth/activate/{token}")
     resp = post("/auth/login", {"email": email, "password": "Test1234"})
     refresh_token = resp.json()["data"]["refresh_token"]
 
