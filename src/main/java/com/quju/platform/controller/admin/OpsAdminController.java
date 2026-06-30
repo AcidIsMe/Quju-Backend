@@ -64,19 +64,19 @@ public class OpsAdminController {
     public ApiResponse<List<Map<String, Object>>> users(@RequestParam(required = false) String q,
                                                         @RequestParam(required = false) String role,
                                                         @RequestParam(required = false) String status,
-                                                        @RequestParam(required = false) String cursor,
-                                                        @RequestParam(defaultValue = "20") Integer limit) {
-        int size = normalizedLimit(limit);
+                                                        @RequestParam(defaultValue = "1") Integer page,
+                                                        @RequestParam(defaultValue = "10") Integer size) {
+        int pageSize = clampPageSize(size);
+        int offset = (Math.max(1, page) - 1) * pageSize;
         var wrapper = Wrappers.<UserEntity>lambdaQuery()
                 .and(q != null && !q.isBlank(), w -> w.like(UserEntity::getEmail, q).or().like(UserEntity::getNickname, q))
                 .eq(role != null, UserEntity::getRole, role)
                 .eq(status != null, UserEntity::getStatus, status);
-        applyUserCursor(wrapper, cursor);
+        long total = userMapper.selectCount(wrapper);
         wrapper.orderByDesc(UserEntity::getCreatedAt).orderByDesc(UserEntity::getId);
-        List<UserEntity> rows = userMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
-        List<UserEntity> pageRows = trimPage(rows, size);
-        List<Map<String, Object>> data = pageRows.stream().map(this::userItem).toList();
-        return ApiResponse.page(data, pagination(rows, pageRows, size, user -> cursorOf(user.getCreatedAt(), user.getId())));
+        wrapper.last("LIMIT " + offset + "," + pageSize);
+        List<Map<String, Object>> data = userMapper.selectList(wrapper).stream().map(this::userItem).toList();
+        return ApiResponse.page(data, pageInfo(total, page, pageSize));
     }
 
     @GetMapping("/users/{id}")
@@ -122,17 +122,17 @@ public class OpsAdminController {
     }
 
     @GetMapping("/merchants/pending")
-    public ApiResponse<List<Map<String, Object>>> pendingMerchants(@RequestParam(required = false) String cursor,
-                                                                   @RequestParam(defaultValue = "20") Integer limit) {
-        int size = normalizedLimit(limit);
+    public ApiResponse<List<Map<String, Object>>> pendingMerchants(@RequestParam(defaultValue = "1") Integer page,
+                                                                   @RequestParam(defaultValue = "10") Integer size) {
+        int pageSize = clampPageSize(size);
+        int offset = (Math.max(1, page) - 1) * pageSize;
         var wrapper = Wrappers.<MerchantProfileEntity>lambdaQuery()
                 .eq(MerchantProfileEntity::getAuditStatus, "pending");
-        applyMerchantCursor(wrapper, cursor);
+        long total = merchantProfileMapper.selectCount(wrapper);
         wrapper.orderByDesc(MerchantProfileEntity::getCreatedAt).orderByDesc(MerchantProfileEntity::getId);
-        List<MerchantProfileEntity> rows = merchantProfileMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
-        List<MerchantProfileEntity> pageRows = trimPage(rows, size);
-        List<Map<String, Object>> data = pageRows.stream().map(this::merchantItem).toList();
-        return ApiResponse.page(data, pagination(rows, pageRows, size, merchant -> cursorOf(merchant.getCreatedAt(), merchant.getId())));
+        wrapper.last("LIMIT " + offset + "," + pageSize);
+        List<Map<String, Object>> data = merchantProfileMapper.selectList(wrapper).stream().map(this::merchantItem).toList();
+        return ApiResponse.page(data, pageInfo(total, page, pageSize));
     }
 
     @PostMapping("/merchants/{id}/approve")
@@ -151,28 +151,27 @@ public class OpsAdminController {
     @GetMapping("/activities")
     public ApiResponse<List<Map<String, Object>>> activities(@RequestParam(required = false) String status,
                                                              @RequestParam(required = false) String q,
-                                                             @RequestParam(required = false) String cursor,
-                                                             @RequestParam(defaultValue = "20") Integer limit) {
-        int size = normalizedLimit(limit);
+                                                             @RequestParam(defaultValue = "1") Integer page,
+                                                             @RequestParam(defaultValue = "10") Integer size) {
+        int pageSize = clampPageSize(size);
+        int offset = (Math.max(1, page) - 1) * pageSize;
         var wrapper = Wrappers.<ActivityEntity>lambdaQuery()
                 .eq(status != null, ActivityEntity::getStatus, status)
                 .and(q != null && !q.isBlank(), w -> w.like(ActivityEntity::getTitle, q).or().like(ActivityEntity::getDescription, q));
-        applyActivityCursor(wrapper, cursor);
+        long total = activityMapper.selectCount(wrapper);
         wrapper.orderByDesc(ActivityEntity::getCreatedAt).orderByDesc(ActivityEntity::getId);
-        List<ActivityEntity> rows = activityMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
-        List<ActivityEntity> pageRows = trimPage(rows, size);
-        List<Map<String, Object>> data = pageRows.stream().map(this::activityItem).toList();
-        return ApiResponse.page(data, pagination(rows, pageRows, size, activity -> cursorOf(activity.getCreatedAt(), activity.getId())));
+        wrapper.last("LIMIT " + offset + "," + pageSize);
+        List<Map<String, Object>> data = activityMapper.selectList(wrapper).stream().map(this::activityItem).toList();
+        return ApiResponse.page(data, pageInfo(total, page, pageSize));
     }
 
     @GetMapping("/activities/{id}")
-    public ApiResponse<Map<String, Object>> activityDetail(@PathVariable String id) {
-        Map<String, Object> detail = activityService.detailWithAggregation(id, null);
-        // 修复 key 名：前端期望 created_at，后端 detailWithAggregation 返回 create_at
-        if (detail.containsKey("create_at")) {
-            detail.put("created_at", detail.remove("create_at"));
+    public ApiResponse<Map<String, Object>> activity(@PathVariable String id) {
+        ActivityEntity activity = activityMapper.selectById(id);
+        if (activity == null) {
+            return ApiResponse.fail(404, "活动不存在");
         }
-        return ApiResponse.ok(detail);
+        return ApiResponse.ok(activityDetailItem(activity));
     }
 
     @PostMapping("/activities/{id}/review")
@@ -372,6 +371,27 @@ public class OpsAdminController {
         return item;
     }
 
+    private Map<String, Object> activityDetailItem(ActivityEntity activity) {
+        Map<String, Object> item = activityItem(activity);
+        item.put("cover_image_url", activity.getCoverImageUrl());
+        item.put("registration_deadline", activity.getRegistrationDeadline());
+        item.put("min_credit_score", activity.getMinCreditScore());
+        item.put("min_age", activity.getMinAge());
+        item.put("fee_type", activity.getFeeType());
+        item.put("fee_amount", activity.getFeeAmount());
+        item.put("city", activity.getCity());
+        item.put("location_lat", activity.getLocationLat());
+        item.put("location_lng", activity.getLocationLng());
+        item.put("review_reason", activity.getReviewReason());
+        item.put("reviewed_by", activity.getReviewedBy());
+        item.put("reviewed_at", activity.getReviewedAt());
+        item.put("is_team_activity", activity.getTeamActivity());
+        item.put("team_id", activity.getTeamId());
+        item.put("check_in_enabled", activity.getCheckInEnabled());
+        item.put("check_in_location_required", activity.getCheckInLocationRequired());
+        return item;
+    }
+
     private Map<String, Object> dashboardActivityItem(ActivityEntity activity) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("id", activity.getId());
@@ -386,21 +406,31 @@ public class OpsAdminController {
         return item;
     }
 
+    private int clampPageSize(Integer size) {
+        int value = size == null ? 10 : size;
+        return Math.max(1, Math.min(value, 100));
+    }
+
+    private Map<String, Object> pageInfo(long total, int page, int pageSize) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("total", total);
+        map.put("page", page);
+        map.put("size", pageSize);
+        return map;
+    }
+
+    // region Cursor helpers — retained for /admin/teams
     private int normalizedLimit(Integer limit) {
         int value = limit == null ? 20 : limit;
         return Math.max(1, Math.min(value, 100));
     }
 
     private <T> List<T> trimPage(List<T> rows, int limit) {
-        if (rows.size() <= limit) {
-            return rows;
-        }
+        if (rows.size() <= limit) return rows;
         return new ArrayList<>(rows.subList(0, limit));
     }
 
-    private <T> Map<String, Object> pagination(List<T> rows,
-                                               List<T> pageRows,
-                                               int limit,
+    private <T> Map<String, Object> pagination(List<T> rows, List<T> pageRows, int limit,
                                                java.util.function.Function<T, String> cursorFactory) {
         boolean hasMore = rows.size() > limit;
         Map<String, Object> map = new LinkedHashMap<>();
@@ -412,30 +442,6 @@ public class OpsAdminController {
 
     private String cursorOf(LocalDateTime createdAt, String id) {
         return (createdAt == null ? LocalDateTime.now() : createdAt) + "|" + id;
-    }
-
-    private void applyUserCursor(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserEntity> wrapper, String cursor) {
-        CursorParts parts = parseCursor(cursor);
-        if (parts == null) return;
-        wrapper.and(w -> w
-                .lt(UserEntity::getCreatedAt, parts.time())
-                .or(w2 -> w2.eq(UserEntity::getCreatedAt, parts.time()).lt(UserEntity::getId, parts.id())));
-    }
-
-    private void applyMerchantCursor(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<MerchantProfileEntity> wrapper, String cursor) {
-        CursorParts parts = parseCursor(cursor);
-        if (parts == null) return;
-        wrapper.and(w -> w
-                .lt(MerchantProfileEntity::getCreatedAt, parts.time())
-                .or(w2 -> w2.eq(MerchantProfileEntity::getCreatedAt, parts.time()).lt(MerchantProfileEntity::getId, parts.id())));
-    }
-
-    private void applyActivityCursor(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ActivityEntity> wrapper, String cursor) {
-        CursorParts parts = parseCursor(cursor);
-        if (parts == null) return;
-        wrapper.and(w -> w
-                .lt(ActivityEntity::getCreatedAt, parts.time())
-                .or(w2 -> w2.eq(ActivityEntity::getCreatedAt, parts.time()).lt(ActivityEntity::getId, parts.id())));
     }
 
     private void applyTeamCursor(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TeamEntity> wrapper, String cursor) {
@@ -457,6 +463,6 @@ public class OpsAdminController {
         }
     }
 
-    private record CursorParts(LocalDateTime time, String id) {
-    }
+    private record CursorParts(LocalDateTime time, String id) {}
+    // endregion
 }
