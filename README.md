@@ -2,6 +2,46 @@
 
 Spring Boot 3 + MySQL 后端框架，按 `API与数据库设计最新.md` 搭建了可运行的分层骨架。
 
+## 重要说明：注册、登录与邮箱激活
+
+当前项目已经实现了“邮箱 + 密码注册、账号激活、登录、JWT 双 Token、刷新、退出”的后端闭环，但**尚未接入真实 SMTP 邮件发送服务**。也就是说，代码会生成激活令牌并保存到数据库，但目前不会真的向用户邮箱发送激活链接。
+
+已实现：
+
+- 个人用户注册：`POST /api/auth/register/personal`
+- 商家用户注册：`POST /api/auth/register/merchant`
+- 密码使用 BCrypt 加密保存。
+- 注册时写入 `users` 和 `activation_tokens`，激活令牌 24 小时过期。
+- 未激活用户状态为 `pending_activation`，登录时会被拦截。
+- 激活接口：`GET /api/auth/activate/{token}` 或 `GET /api/auth/activate?token=...`
+- 登录接口：`POST /api/auth/login`，成功后返回 `access_token` 和 `refresh_token`。
+- 刷新接口：`POST /api/auth/refresh`，退出接口：`POST /api/auth/logout`。
+- 商家注册会创建 `merchant_profiles`，初始审核状态为 `pending`，后台审核接口已做基础实现。
+
+开发测试时的激活方式：
+
+1. 调用注册接口。
+2. 从响应 `data.activation_token` 中复制激活令牌。
+3. 访问 `http://localhost:3000/api/auth/activate/{activation_token}` 完成激活。
+4. 激活成功后再调用登录接口。
+
+示例：
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:3000/api/auth/activate/这里替换为activation_token"
+```
+
+尚未实现的生产级能力：
+
+- 未添加 `spring-boot-starter-mail`。
+- 未配置 `spring.mail.*` SMTP 参数。
+- 未实现 `MailService` / `JavaMailSender` 发送真实激活邮件。
+- `POST /api/auth/resend-activation` 当前只会重新生成激活令牌，不会发送邮件。
+- 商家营业执照当前按 `licenseImageUrl` 等 JSON 字段提交，尚未实现 multipart 文件上传注册。
+- 生产环境不应在注册响应里返回 `activation_token`，应改为只发送邮件链接。
+
+如果后续要补全真实邮箱激活，需要增加邮件依赖和 SMTP 配置，在注册和重发激活令牌后调用邮件服务发送类似 `http://localhost:3000/api/auth/activate/{token}` 的激活链接。
+
 ## 技术栈
 
 - Java 21
