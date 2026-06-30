@@ -69,12 +69,24 @@ public class RegistrationServiceImpl implements RegistrationService {
         if (activity.getCurrentParticipants() >= activity.getMaxParticipants()) {
             throw new BusinessException(40901, "名额已满");
         }
-        RegistrationEntity registration = new RegistrationEntity();
-        registration.setActivityId(activityId);
-        registration.setUserId(userId);
-        registration.setStatus("registered");
-        registration.setFormData(formData);
-        registrationMapper.insert(registration);
+        // 检查是否有已取消的报名记录，如有则复用（避免唯一键冲突）
+        RegistrationEntity registration = registrationMapper.selectOne(Wrappers.<RegistrationEntity>lambdaQuery()
+                .eq(RegistrationEntity::getActivityId, activityId)
+                .eq(RegistrationEntity::getUserId, userId)
+                .eq(RegistrationEntity::getStatus, "cancelled"));
+        if (registration != null) {
+            registration.setStatus("registered");
+            registration.setFormData(formData);
+            registration.setCancelledAt(null);
+            registrationMapper.updateById(registration);
+        } else {
+            registration = new RegistrationEntity();
+            registration.setActivityId(activityId);
+            registration.setUserId(userId);
+            registration.setStatus("registered");
+            registration.setFormData(formData);
+            registrationMapper.insert(registration);
+        }
         activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
         activityMapper.updateById(activity);
         return Map.of("registration_id", registration.getId(), "status", registration.getStatus(), "current_participants", activity.getCurrentParticipants());

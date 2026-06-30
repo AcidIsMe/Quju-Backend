@@ -42,14 +42,15 @@ public class ActivityServiceImpl implements ActivityService {
         ActivityEntity entity = new ActivityEntity();
         fill(entity, req);
         entity.setCreatorId(creatorId);
-        entity.setStatus(resolveInitialStatus(req));
+        String intent = resolveInitialStatus(req);
+        entity.setStatus("draft");
         entity.setCurrentParticipants(0);
         entity.setCheckInEnabled(false);
         entity.setCheckInLocationRequired(false);
         activityMapper.insert(entity);
-        // 非草稿状态（直接提交审核）：先提交审核，再触发 AI 审核（US12）
-        if (!"draft".equals(entity.getStatus())) {
-            entity.setStatus(stateMachine.submitForReview(entity.getStatus(), entity.getMaxParticipants()));
+        // 非草稿意图：提交审核（状态机从 draft 过渡到合适的审核状态）
+        if (!"draft".equals(intent)) {
+            entity.setStatus(stateMachine.submitForReview("draft", entity.getMaxParticipants()));
             activityMapper.updateById(entity);
             processAiReview(entity);
         }
