@@ -10,6 +10,7 @@ import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.mapper.WaitlistMapper;
+import com.quju.platform.service.NotificationService;
 import com.quju.platform.service.RegistrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final UserMapper userMapper;
     private final RegistrationMapper registrationMapper;
     private final WaitlistMapper waitlistMapper;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -127,6 +129,15 @@ public class RegistrationServiceImpl implements RegistrationService {
                     // 递增参与人数
                     activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
                     activityMapper.updateById(activity);
+
+                    // 发送递补通知
+                    notificationService.notify(
+                            waitlistEntry.getUserId(),
+                            "waitlist_promoted",
+                            "候补成功",
+                            "您已从候补队列递补为正式报名者，请在活动页面查看详情。",
+                            Map.of("activity_id", activityId, "activity_title", activity.getTitle())
+                    );
                 });
     }
 

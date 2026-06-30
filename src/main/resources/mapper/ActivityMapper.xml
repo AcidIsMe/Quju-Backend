@@ -14,6 +14,10 @@
         WHERE status = 'published'
           AND location_lat IS NOT NULL
           AND location_lng IS NOT NULL
+          AND location_lat BETWEEN #{lat} - (#{radiusMeters} / 111000.0)
+                               AND #{lat} + (#{radiusMeters} / 111000.0)
+          AND location_lng BETWEEN #{lng} - (#{radiusMeters} / (111000.0 * COS(RADIANS(#{lat}))))
+                               AND #{lng} + (#{radiusMeters} / (111000.0 * COS(RADIANS(#{lat}))))
         HAVING distance_meters &lt;= #{radiusMeters}
         ORDER BY distance_meters ASC
         LIMIT #{limit}

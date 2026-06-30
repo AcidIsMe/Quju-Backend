@@ -43,6 +43,7 @@ public class JwtTokenUtil {
         return Jwts.builder()
                 .subject(subject)
                 .claims(claims)
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(ttlSeconds)))
                 .signWith(secretKey)

@@ -39,7 +39,21 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     @Override
     public CursorPage<ActivityEntity> recommended(ActivityQueryReq req) {
-        return latest(req);
+        // 推荐策略：热门优先（报名人数多、近期发布），仅展示已发布且未结束的活动
+        LambdaQueryWrapper<ActivityEntity> wrapper = Wrappers.<ActivityEntity>lambdaQuery()
+                .eq(ActivityEntity::getStatus, "published")
+                .ge(ActivityEntity::getEndTime, LocalDateTime.now())
+                .eq(req.getCity() != null && !req.getCity().isBlank(), ActivityEntity::getCity, req.getCity())
+                .eq(req.getFeeType() != null && !req.getFeeType().isBlank(), ActivityEntity::getFeeType, req.getFeeType());
+        applyCursorDesc(wrapper, req.getCursor());
+        wrapper.orderByDesc(ActivityEntity::getCurrentParticipants)
+                .orderByDesc(ActivityEntity::getCreatedAt)
+                .orderByDesc(ActivityEntity::getId);
+        List<ActivityEntity> items = activityMapper.selectList(wrapper.last("LIMIT " + (req.normalizedLimit() + 1)));
+        return CursorPage.of(items, req.normalizedLimit(), e -> {
+            LocalDateTime t = e.getCreatedAt();
+            return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
+        });
     }
 
     @Override
