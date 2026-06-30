@@ -218,7 +218,7 @@ public class UserController {
 
     private Map<String, Object> paginationMap(CursorPage<?> page) {
         Map<String, Object> map = new java.util.HashMap<>();
-        map.put("cursor", page.getNextCursor());
+        map.put("next_cursor", page.getNextCursor());
         map.put("has_more", page.getHasMore());
         map.put("limit", page.getLimit());
         return map;

@@ -47,7 +47,7 @@ public class DiscoveryController {
 
     private Map<String, Object> paginationMap(CursorPage<?> page) {
         Map<String, Object> map = new HashMap<>();
-        map.put("cursor", page.getNextCursor());
+        map.put("next_cursor", page.getNextCursor());
         map.put("has_more", page.getHasMore());
         map.put("limit", page.getLimit());
         return map;
