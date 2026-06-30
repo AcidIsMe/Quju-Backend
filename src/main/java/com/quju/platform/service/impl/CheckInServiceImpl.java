@@ -5,9 +5,11 @@ import com.quju.platform.component.gis.MapSdkService;
 import com.quju.platform.dto.registration.CheckInReq;
 import com.quju.platform.entity.ActivityEntity;
 import com.quju.platform.entity.RegistrationEntity;
+import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
+import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.CheckInService;
 import com.quju.platform.util.QrCodeGenerator;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class CheckInServiceImpl implements CheckInService {
 
     private final ActivityMapper activityMapper;
     private final RegistrationMapper registrationMapper;
+    private final UserMapper userMapper;
     private final QrCodeGenerator qrCodeGenerator;
     private final MapSdkService mapSdkService;
 
@@ -37,6 +40,9 @@ public class CheckInServiceImpl implements CheckInService {
         }
         if (activity.getCheckInQrCode() != null && !activity.getCheckInQrCode().equals(req.getQrData())) {
             throw new BusinessException(40304, "签到码无效");
+        }
+        if (!Boolean.TRUE.equals(activity.getCheckInEnabled())) {
+            throw new BusinessException(40307, "签到功能未启用");
         }
         if (Boolean.TRUE.equals(activity.getCheckInLocationRequired())) {
             double distance = mapSdkService.distanceMeters(activity.getLocationLat(), activity.getLocationLng(), req.getLat(), req.getLng());
@@ -60,10 +66,13 @@ public class CheckInServiceImpl implements CheckInService {
     }
 
     @Override
-    public Map<String, Object> qrcode(String activityId) {
+    public Map<String, Object> qrcode(String activityId, String userId) {
         ActivityEntity activity = activityMapper.selectById(activityId);
         if (activity == null) {
             throw new BusinessException(40401, "活动不存在");
+        }
+        if (!activity.getCreatorId().equals(userId)) {
+            throw new BusinessException(40306, "只有活动发起人才能生成签到码");
         }
         String qrData = "activity:" + activityId + ":" + System.currentTimeMillis();
         activity.setCheckInQrCode(qrData);
@@ -73,15 +82,38 @@ public class CheckInServiceImpl implements CheckInService {
     }
 
     @Override
-    public List<Map<String, Object>> list(String activityId) {
-        return registrationMapper.selectList(Wrappers.<RegistrationEntity>lambdaQuery()
+    public Map<String, Object> list(String activityId, String userId) {
+        ActivityEntity activity = activityMapper.selectById(activityId);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+        if (!activity.getCreatorId().equals(userId)) {
+            throw new BusinessException(40306, "只有活动发起人才能查看签到列表");
+        }
+        List<Map<String, Object>> participants = registrationMapper.selectList(Wrappers.<RegistrationEntity>lambdaQuery()
                         .eq(RegistrationEntity::getActivityId, activityId))
                 .stream()
-                .map(item -> Map.<String, Object>of(
-                        "user_id", item.getUserId(),
-                        "registered_at", item.getCreatedAt() == null ? "" : item.getCreatedAt().toString(),
-                        "checked_in", "checked_in".equals(item.getStatus()),
-                        "checked_in_at", item.getCheckedInAt() == null ? "" : item.getCheckedInAt().toString()))
+                .map(item -> {
+                    UserEntity user = userMapper.selectById(item.getUserId());
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("user_id", item.getUserId());
+                    m.put("nickname", user != null ? user.getNickname() : "");
+                    m.put("avatar_url", user != null ? user.getAvatarUrl() : "");
+                    m.put("registered_at", item.getCreatedAt() == null ? "" : item.getCreatedAt().toString());
+                    m.put("checked_in", "checked_in".equals(item.getStatus()));
+                    m.put("checked_in_at", item.getCheckedInAt() == null ? "" : item.getCheckedInAt().toString());
+                    return m;
+                })
                 .toList();
+        long totalRegistered = participants.size();
+        long totalCheckedIn = participants.stream().filter(p -> (boolean) p.get("checked_in")).count();
+        return Map.of(
+                "items", participants,
+                "stats", Map.of(
+                        "total_registered", (int) totalRegistered,
+                        "total_checked_in", (int) totalCheckedIn,
+                        "check_in_rate", totalRegistered > 0 ? (double) Math.round((double) totalCheckedIn / totalRegistered * 100) / 100 : 0.0
+                )
+        );
     }
 }

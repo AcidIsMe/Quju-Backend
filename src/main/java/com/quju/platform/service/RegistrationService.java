@@ -9,4 +9,5 @@ public interface RegistrationService {
     void cancel(String activityId, String userId);
     WaitlistEntity joinWaitlist(String activityId, String userId);
     void leaveWaitlist(String activityId, String userId);
+    Map<String, Object> getWaitlistPosition(String activityId, String userId);
 }

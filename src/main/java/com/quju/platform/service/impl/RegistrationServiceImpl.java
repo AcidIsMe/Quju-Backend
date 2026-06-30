@@ -195,4 +195,24 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .eq(WaitlistEntity::getActivityId, activityId)
                 .eq(WaitlistEntity::getUserId, userId));
     }
+
+    @Override
+    public Map<String, Object> getWaitlistPosition(String activityId, String userId) {
+        WaitlistEntity entry = waitlistMapper.selectOne(Wrappers.<WaitlistEntity>lambdaQuery()
+                .eq(WaitlistEntity::getActivityId, activityId)
+                .eq(WaitlistEntity::getUserId, userId)
+                .eq(WaitlistEntity::getStatus, "waiting"));
+        if (entry == null) {
+            return Map.of("in_queue", false);
+        }
+        long waitingAhead = waitlistMapper.selectCount(Wrappers.<WaitlistEntity>lambdaQuery()
+                .eq(WaitlistEntity::getActivityId, activityId)
+                .eq(WaitlistEntity::getStatus, "waiting")
+                .lt(WaitlistEntity::getPosition, entry.getPosition()));
+        return Map.of(
+                "in_queue", true,
+                "position", entry.getPosition(),
+                "waiting_count_ahead", (int) waitingAhead
+        );
+    }
 }
