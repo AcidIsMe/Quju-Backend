@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.dto.activity.ActivityQueryReq;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.entity.ActivityEntity;
+import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.service.DiscoveryService;
 import lombok.RequiredArgsConstructor;
@@ -92,11 +93,17 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
             });
         }
-        return latest(req);
+        // AC5: 未提供位置信息 → 提示需要位置权限
+        throw new BusinessException(40010, "需要位置权限");
     }
 
     @Override
     public CursorPage<ActivityEntity> mapBox(ActivityQueryReq req) {
+        if (req.getSwLat() == null || req.getSwLng() == null
+                || req.getNeLat() == null || req.getNeLng() == null) {
+            // AC5: 地图模式下未提供边界框 → 提示需要位置权限
+            throw new BusinessException(40010, "需要位置权限");
+        }
         int limit = req.normalizedLimit() + 1;
         List<ActivityEntity> items = activityMapper.searchMapBox(
                 req.getSwLat(), req.getSwLng(),

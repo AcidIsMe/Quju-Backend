@@ -53,7 +53,12 @@ public class DiscoveryController {
             CursorPage<ActivityEntity> page = discoveryService.mapBox(req);
             return ApiResponse.page(page.getItems(), paginationMap(page));
         }
-        // 兜底：若无边界框参数，回退到半径查询
+        // 兜底：若无边界框但有用户位置，回退到半径查询
+        if (req.getLat() != null && req.getLng() != null) {
+            CursorPage<ActivityEntity> page = discoveryService.nearby(req);
+            return ApiResponse.page(page.getItems(), paginationMap(page));
+        }
+        // AC5: 既无边界框也无位置 → 提示需要位置权限（由 service 层抛出 40010）
         CursorPage<ActivityEntity> page = discoveryService.nearby(req);
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
