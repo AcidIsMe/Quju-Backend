@@ -16,4 +16,5 @@ public interface ActivityService {
     void deleteDraft(String id, String userId);
     List<RegistrationEntity> participants(String id);
     ActivityEntity submitForReview(String id);
+    ActivityEntity processAiReview(String id);
 }

@@ -39,15 +39,33 @@ public class DiscoveryController {
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
 
-    @GetMapping({"/nearby", "/map"})
+    @GetMapping({"/nearby"})
     public ApiResponse<?> nearby(@ModelAttribute ActivityQueryReq req) {
+        CursorPage<ActivityEntity> page = discoveryService.nearby(req);
+        return ApiResponse.page(page.getItems(), paginationMap(page));
+    }
+
+    @GetMapping("/map")
+    public ApiResponse<?> map(@ModelAttribute ActivityQueryReq req) {
+        // 地图模式使用边界框查询（US17 AC3）
+        if (req.getSwLat() != null && req.getSwLng() != null
+                && req.getNeLat() != null && req.getNeLng() != null) {
+            CursorPage<ActivityEntity> page = discoveryService.mapBox(req);
+            return ApiResponse.page(page.getItems(), paginationMap(page));
+        }
+        // 兜底：若无边界框但有用户位置，回退到半径查询
+        if (req.getLat() != null && req.getLng() != null) {
+            CursorPage<ActivityEntity> page = discoveryService.nearby(req);
+            return ApiResponse.page(page.getItems(), paginationMap(page));
+        }
+        // AC5: 既无边界框也无位置 → 提示需要位置权限（由 service 层抛出 40010）
         CursorPage<ActivityEntity> page = discoveryService.nearby(req);
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
 
     private Map<String, Object> paginationMap(CursorPage<?> page) {
         Map<String, Object> map = new HashMap<>();
-        map.put("cursor", page.getNextCursor());
+        map.put("next_cursor", page.getNextCursor());
         map.put("has_more", page.getHasMore());
         map.put("limit", page.getLimit());
         return map;

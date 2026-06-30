@@ -53,6 +53,8 @@ public class ActivityController {
 
     @PostMapping("/{id}/submit")
     public ApiResponse<ActivityEntity> submit(@PathVariable String id) {
-        return ApiResponse.ok(activityService.submitForReview(id));
+        ActivityEntity entity = activityService.submitForReview(id);
+        // 提交审核后自动触发 AI 内容安全审核（US12）
+        return ApiResponse.ok(activityService.processAiReview(id));
     }
 }

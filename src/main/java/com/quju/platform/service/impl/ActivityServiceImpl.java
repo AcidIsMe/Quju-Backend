@@ -1,6 +1,7 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.quju.platform.component.ai.CmsClient;
 import com.quju.platform.component.statemachine.ActivityStateMachine;
 import com.quju.platform.dto.activity.ActivityCreateReq;
 import com.quju.platform.entity.ActivityEntity;
@@ -11,6 +12,7 @@ import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.ActivityService;
+import com.quju.platform.service.NotificationService;
 import com.quju.platform.util.GeoJsonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
@@ -32,6 +34,8 @@ public class ActivityServiceImpl implements ActivityService {
     private final UserMapper userMapper;
     private final RegistrationMapper registrationMapper;
     private final ActivityStateMachine stateMachine;
+    private final CmsClient cmsClient;
+    private final NotificationService notificationService;
 
     @Override
     public ActivityEntity create(ActivityCreateReq req, String creatorId) {
@@ -43,6 +47,12 @@ public class ActivityServiceImpl implements ActivityService {
         entity.setCheckInEnabled(false);
         entity.setCheckInLocationRequired(false);
         activityMapper.insert(entity);
+        // 非草稿状态（直接提交审核）：先提交审核，再触发 AI 审核（US12）
+        if (!"draft".equals(entity.getStatus())) {
+            entity.setStatus(stateMachine.submitForReview(entity.getStatus(), entity.getMaxParticipants()));
+            activityMapper.updateById(entity);
+            processAiReview(entity);
+        }
         return entity;
     }
 
@@ -203,6 +213,58 @@ public class ActivityServiceImpl implements ActivityService {
         entity.setStatus(stateMachine.submitForReview(entity.getStatus(), entity.getMaxParticipants()));
         activityMapper.updateById(entity);
         return entity;
+    }
+
+    /**
+     * AI 内容安全审核（US12）
+     * - pass → 自动发布
+     * - violation → 自动驳回
+     * - uncertain → 转为 pending_manual_review 等待人工
+     */
+    @Override
+    public ActivityEntity processAiReview(String id) {
+        ActivityEntity entity = detail(id);
+        processAiReview(entity);
+        return detail(id); // 重新加载最新状态
+    }
+
+    private void processAiReview(ActivityEntity entity) {
+        String currentStatus = entity.getStatus();
+        // 只有 pending_ai_review 的活动才走自动 AI 审核
+        // >50 人的活动直接进入人工队列（pending_manual_review），由管理员审核
+        if (!"pending_ai_review".equals(currentStatus)) {
+            return;
+        }
+        String result = cmsClient.reviewContent(entity.getTitle(), entity.getDescription(), entity.getTags());
+        entity.setAiReviewResult(result);
+        String newStatus;
+        String notifyTitle;
+        String notifyContent;
+        if ("pass".equals(result)) {
+            newStatus = "published";
+            notifyTitle = "活动审核通过";
+            notifyContent = "您的活动「" + entity.getTitle() + "」已通过 AI 内容安全审核并自动发布。";
+        } else if ("violation".equals(result)) {
+            newStatus = "rejected";
+            String reason = "活动内容包含违规信息，已被系统自动驳回";
+            entity.setReviewReason(reason);
+            entity.setReviewedAt(LocalDateTime.now());
+            notifyTitle = "活动审核驳回";
+            notifyContent = "您的活动「" + entity.getTitle() + "」未通过内容安全审核，原因：" + reason;
+        } else {
+            // uncertain — 保持当前状态，降级为人工审核
+            // 转为 pending_manual_review 等待管理员处理
+            newStatus = "pending_manual_review";
+            notifyTitle = "活动已提交人工审核";
+            notifyContent = "您的活动「" + entity.getTitle() + "」已提交，正在等待管理员审核。";
+        }
+        entity.setStatus(newStatus);
+        activityMapper.updateById(entity);
+        // 通知活动创建者
+        if (entity.getCreatorId() != null) {
+            notificationService.notify(entity.getCreatorId(), "activity_review",
+                    notifyTitle, notifyContent, Map.of("activity_id", entity.getId()));
+        }
     }
 
     private void fill(ActivityEntity entity, ActivityCreateReq req) {

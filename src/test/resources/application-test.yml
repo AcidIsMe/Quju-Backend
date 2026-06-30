@@ -1,0 +1,35 @@
+quju:
+  jwt:
+    secret: "dGVzdC1zZWNyZXQta2V5LWZvci1xdWp1LXBsYXRmb3JtLW1pbmltdW0tMzItYnl0ZXM="
+    access-token-ttl-seconds: 7200
+    refresh-token-ttl-seconds: 259200
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:quju_test;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: SA
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema-h2.sql
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: ASSIGN_UUID
+      update-strategy: NOT_NULL
