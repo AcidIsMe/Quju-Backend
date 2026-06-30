@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.component.statemachine.ActivityStateMachine;
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.entity.*;
+import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.*;
 import com.quju.platform.service.MerchantService;
+import com.quju.platform.service.NotificationService;
 import com.quju.platform.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,7 @@ public class OpsAdminController {
     private final ActivityMapper activityMapper;
     private final TeamMapper teamMapper;
     private final ActivityStateMachine activityStateMachine;
+    private final NotificationService notificationService;
 
     @GetMapping("/dashboard")
     public ApiResponse<Map<String, Object>> dashboard() {
@@ -165,13 +168,53 @@ public class OpsAdminController {
                                                       @RequestBody Map<String, String> body) {
         String adminId = SecurityUtil.requireCurrentUserId();
         ActivityEntity activity = activityMapper.selectById(id);
-        if (activity != null) {
-            String action = body.getOrDefault("action", "approve");
-            activity.setStatus("approve".equals(action) ? activityStateMachine.approve() : activityStateMachine.reject());
-            activity.setReviewReason(body.get("reason"));
-            activity.setReviewedBy(adminId);
-            activity.setReviewedAt(LocalDateTime.now());
-            activityMapper.updateById(activity);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+        // 状态守卫：只有待审核状态才能审核
+        activityStateMachine.validateReviewable(activity.getStatus());
+
+        String action = body.getOrDefault("action", "approve");
+        String reason = body.get("reason");
+        String newStatus;
+        String notifyTitle;
+        String notifyContent;
+
+        switch (action) {
+            case "approve" -> {
+                newStatus = activityStateMachine.approve();
+                notifyTitle = "活动审核通过";
+                notifyContent = "您的活动「" + activity.getTitle() + "」已通过管理员审核并发布。";
+            }
+            case "request_changes" -> {
+                if (reason == null || reason.isBlank()) {
+                    throw new BusinessException(40015, "退回修改时必须填写原因");
+                }
+                newStatus = activityStateMachine.requestChanges();
+                notifyTitle = "活动需要修改";
+                notifyContent = "您的活动「" + activity.getTitle() + "」被退回修改，原因：" + reason;
+            }
+            default -> {
+                // reject
+                if (reason == null || reason.isBlank()) {
+                    throw new BusinessException(40016, "驳回活动时必须填写原因");
+                }
+                newStatus = activityStateMachine.reject();
+                notifyTitle = "活动审核驳回";
+                notifyContent = "您的活动「" + activity.getTitle() + "」未通过审核，原因：" + reason;
+            }
+        }
+
+        activity.setStatus(newStatus);
+        activity.setReviewReason(reason);
+        activity.setReviewedBy(adminId);
+        activity.setReviewedAt(LocalDateTime.now());
+        activityMapper.updateById(activity);
+
+        // 通知活动创建者（US13 AC2）
+        if (activity.getCreatorId() != null) {
+            notificationService.notify(activity.getCreatorId(), "activity_review",
+                    notifyTitle, notifyContent, Map.of("activity_id", activity.getId()));
         }
         return ApiResponse.ok(activity);
     }
@@ -179,10 +222,28 @@ public class OpsAdminController {
     @PostMapping("/activities/{id}/take-down")
     public ApiResponse<Void> takeDown(@PathVariable String id, @RequestBody(required = false) Map<String, String> body) {
         ActivityEntity activity = activityMapper.selectById(id);
-        if (activity != null) {
-            activity.setStatus(activityStateMachine.takeDown());
-            activity.setReviewReason(body == null ? null : body.get("reason"));
-            activityMapper.updateById(activity);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+        // 状态守卫：只有已发布的活动才能下架
+        activityStateMachine.validateTakeDownable(activity.getStatus());
+        // 原因必填（US40 AC3）
+        String reason = body == null ? null : body.get("reason");
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(40017, "下架活动时必须填写原因");
+        }
+
+        activity.setStatus(activityStateMachine.takeDown());
+        activity.setReviewReason(reason);
+        activity.setReviewedBy(SecurityUtil.requireCurrentUserId());
+        activity.setReviewedAt(LocalDateTime.now());
+        activityMapper.updateById(activity);
+
+        // 通知活动创建者
+        if (activity.getCreatorId() != null) {
+            notificationService.notify(activity.getCreatorId(), "activity_taken_down",
+                    "活动已下架", "您的活动「" + activity.getTitle() + "」已被管理员下架，原因：" + reason,
+                    Map.of("activity_id", activity.getId()));
         }
         return ApiResponse.ok();
     }
@@ -190,9 +251,20 @@ public class OpsAdminController {
     @PostMapping("/activities/{id}/restore")
     public ApiResponse<Void> restoreActivity(@PathVariable String id) {
         ActivityEntity activity = activityMapper.selectById(id);
-        if (activity != null) {
-            activity.setStatus("published");
-            activityMapper.updateById(activity);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+        // 状态守卫：只有已下架的活动才能恢复
+        activityStateMachine.validateRestorable(activity.getStatus());
+
+        activity.setStatus("published");
+        activityMapper.updateById(activity);
+
+        // 通知活动创建者
+        if (activity.getCreatorId() != null) {
+            notificationService.notify(activity.getCreatorId(), "activity_restored",
+                    "活动已恢复", "您的活动「" + activity.getTitle() + "」已恢复上线。",
+                    Map.of("activity_id", activity.getId()));
         }
         return ApiResponse.ok();
     }

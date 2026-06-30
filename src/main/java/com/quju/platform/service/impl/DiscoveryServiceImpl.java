@@ -58,21 +58,23 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     @Override
     public CursorPage<ActivityEntity> search(ActivityQueryReq req) {
-        LambdaQueryWrapper<ActivityEntity> wrapper = Wrappers.<ActivityEntity>lambdaQuery()
-                .eq(ActivityEntity::getStatus, "published")
-                .and(req.getQ() != null && !req.getQ().isBlank(), w -> w
-                        .like(ActivityEntity::getTitle, req.getQ())
-                        .or()
-                        .like(ActivityEntity::getDescription, req.getQ()))
-                .eq(req.getType() != null, ActivityEntity::getActivityType, req.getType())
-                .in(activityTypes(req).size() > 0, ActivityEntity::getActivityType, activityTypes(req))
-                .eq(req.getCity() != null && !req.getCity().isBlank(), ActivityEntity::getCity, req.getCity())
-                .eq(req.getFeeType() != null && !req.getFeeType().isBlank(), ActivityEntity::getFeeType, req.getFeeType())
-                .ge(req.effectiveStartFrom() != null, ActivityEntity::getStartTime, req.effectiveStartFrom())
-                .le(req.effectiveStartTo() != null, ActivityEntity::getStartTime, req.effectiveStartTo());
-        applyCursorAsc(wrapper, req.getCursor());
-        wrapper.orderByAsc(ActivityEntity::getStartTime).orderByAsc(ActivityEntity::getId);
-        List<ActivityEntity> items = activityMapper.selectList(wrapper.last("LIMIT " + (req.normalizedLimit() + 1)));
+        if (req.getQ() == null || req.getQ().isBlank()) {
+            // 无关键词时退化为 latest（US15 AC3）
+            return latest(req);
+        }
+        // 关键词搜索：按相关度排序（标题 > 标签 > 简介 > 发布时间）（US15 AC1）
+        int fetchLimit = req.normalizedLimit() + 1;
+        List<ActivityEntity> items = activityMapper.searchWithRelevance(
+                req.getQ(),
+                req.getCity(),
+                req.getFeeType(),
+                req.effectiveStartFrom() != null ? req.effectiveStartFrom().toString() : null,
+                req.effectiveStartTo() != null ? req.effectiveStartTo().toString() : null,
+                fetchLimit);
+        // 搜索无结果时，返回推荐作为兜底（US15 AC2）
+        if (items.isEmpty()) {
+            return recommended(req);
+        }
         return CursorPage.of(items, req.normalizedLimit(), e -> {
             LocalDateTime t = e.getStartTime();
             return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
@@ -91,6 +93,19 @@ public class DiscoveryServiceImpl implements DiscoveryService {
             });
         }
         return latest(req);
+    }
+
+    @Override
+    public CursorPage<ActivityEntity> mapBox(ActivityQueryReq req) {
+        int limit = req.normalizedLimit() + 1;
+        List<ActivityEntity> items = activityMapper.searchMapBox(
+                req.getSwLat(), req.getSwLng(),
+                req.getNeLat(), req.getNeLng(),
+                limit);
+        return CursorPage.of(items, req.normalizedLimit(), e -> {
+            LocalDateTime t = e.getStartTime();
+            return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
+        });
     }
 
     private void applyCursorDesc(LambdaQueryWrapper<ActivityEntity> wrapper, String cursor) {

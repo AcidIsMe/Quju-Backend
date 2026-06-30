@@ -26,4 +26,46 @@
     <select id="selectByIdForUpdate" resultType="com.quju.platform.entity.ActivityEntity">
         SELECT * FROM activities WHERE id = #{id} FOR UPDATE
     </select>
+
+    <select id="searchWithRelevance" resultType="com.quju.platform.entity.ActivityEntity">
+        SELECT *,
+               CASE
+                   WHEN title LIKE CONCAT('%', #{q}, '%') THEN 3
+                   WHEN tags LIKE CONCAT('%', #{q}, '%') THEN 2
+                   WHEN description LIKE CONCAT('%', #{q}, '%') THEN 1
+                   ELSE 0
+               END AS relevance_score
+        FROM activities
+        WHERE status = 'published'
+          AND (title LIKE CONCAT('%', #{q}, '%')
+               OR tags LIKE CONCAT('%', #{q}, '%')
+               OR description LIKE CONCAT('%', #{q}, '%'))
+        <if test="city != null and city != ''">
+          AND city = #{city}
+        </if>
+        <if test="feeType != null and feeType != ''">
+          AND fee_type = #{feeType}
+        </if>
+        <if test="startAfter != null and startAfter != ''">
+          AND start_time &gt;= #{startAfter}
+        </if>
+        <if test="startBefore != null and startBefore != ''">
+          AND start_time &lt;= #{startBefore}
+        </if>
+        ORDER BY relevance_score DESC, created_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchMapBox" resultType="com.quju.platform.entity.ActivityEntity">
+        SELECT id, title, location_lat, location_lng, start_time,
+               current_participants, max_participants, activity_type, city
+        FROM activities
+        WHERE status = 'published'
+          AND location_lat IS NOT NULL
+          AND location_lng IS NOT NULL
+          AND location_lat BETWEEN #{swLat} AND #{neLat}
+          AND location_lng BETWEEN #{swLng} AND #{neLng}
+        ORDER BY start_time ASC
+        LIMIT #{limit}
+    </select>
 </mapper>

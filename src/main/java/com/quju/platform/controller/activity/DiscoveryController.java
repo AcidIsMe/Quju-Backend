@@ -39,8 +39,21 @@ public class DiscoveryController {
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
 
-    @GetMapping({"/nearby", "/map"})
+    @GetMapping({"/nearby"})
     public ApiResponse<?> nearby(@ModelAttribute ActivityQueryReq req) {
+        CursorPage<ActivityEntity> page = discoveryService.nearby(req);
+        return ApiResponse.page(page.getItems(), paginationMap(page));
+    }
+
+    @GetMapping("/map")
+    public ApiResponse<?> map(@ModelAttribute ActivityQueryReq req) {
+        // 地图模式使用边界框查询（US17 AC3）
+        if (req.getSwLat() != null && req.getSwLng() != null
+                && req.getNeLat() != null && req.getNeLng() != null) {
+            CursorPage<ActivityEntity> page = discoveryService.mapBox(req);
+            return ApiResponse.page(page.getItems(), paginationMap(page));
+        }
+        // 兜底：若无边界框参数，回退到半径查询
         CursorPage<ActivityEntity> page = discoveryService.nearby(req);
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }

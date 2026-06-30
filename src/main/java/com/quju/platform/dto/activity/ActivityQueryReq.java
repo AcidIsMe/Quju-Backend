@@ -26,6 +26,11 @@ public class ActivityQueryReq extends PageQuery {
     private LocalDateTime startTo;
     private LocalDateTime startAfter;
     private LocalDateTime startBefore;
+    // 地图边界框（US17）
+    private BigDecimal swLat;
+    private BigDecimal swLng;
+    private BigDecimal neLat;
+    private BigDecimal neLng;
 
     public Integer effectiveRadiusMeters() {
         if (maxDistance != null) {
