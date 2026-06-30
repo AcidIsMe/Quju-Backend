@@ -11,6 +11,7 @@ public class QujuProperties {
 
     private Jwt jwt = new Jwt();
     private FileStorage files = new FileStorage();
+    private Ai ai = new Ai();
 
     @Data
     public static class Jwt {
@@ -22,5 +23,18 @@ public class QujuProperties {
     @Data
     public static class FileStorage {
         private String uploadDir = "uploads";
+    }
+
+    @Data
+    public static class Ai {
+        private SiliconFlow siliconflow = new SiliconFlow();
+
+        @Data
+        public static class SiliconFlow {
+            private String apiKey;
+            private String model = "Pro/deepseek-ai/DeepSeek-V3.2";
+            private String baseUrl = "https://api.siliconflow.cn/v1";
+            private int timeoutSeconds = 15;
+        }
     }
 }

@@ -10,7 +10,12 @@ import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
+import com.quju.platform.entity.FollowEntity;
+import com.quju.platform.entity.FriendshipEntity;
+import com.quju.platform.mapper.FollowMapper;
+import com.quju.platform.mapper.FriendshipMapper;
 import com.quju.platform.mapper.UserMapper;
+import com.quju.platform.service.SocialGraphService;
 import com.quju.platform.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +35,9 @@ public class UserController {
     private final UserMapper userMapper;
     private final ActivityMapper activityMapper;
     private final RegistrationMapper registrationMapper;
+    private final FollowMapper followMapper;
+    private final FriendshipMapper friendshipMapper;
+    private final SocialGraphService socialGraphService;
 
     @GetMapping("/me")
     public ApiResponse<UserEntity> me() {
@@ -93,30 +101,67 @@ public class UserController {
         }
         long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
                 .eq(ActivityEntity::getCreatorId, id));
-        long followerCount = 0;
-        long followingCount = 0;
-        try {
-            followerCount = 0;
-            followingCount = 0;
-        } catch (Exception ignored) {
+        long followerCount = followMapper.selectCount(Wrappers.<FollowEntity>lambdaQuery()
+                .eq(FollowEntity::getFollowedId, id));
+        long followingCount = followMapper.selectCount(Wrappers.<FollowEntity>lambdaQuery()
+                .eq(FollowEntity::getFollowerId, id));
+
+        // Compute friendship_status for current viewer
+        String currentUserId = SecurityUtil.getCurrentUserIdOrNull();
+        String friendshipStatus = null;
+        String followStatus = null;
+        if (currentUserId != null && !currentUserId.equals(id)) {
+            // Check friendship
+            long accepted = friendshipMapper.selectCount(Wrappers.<FriendshipEntity>lambdaQuery()
+                    .eq(FriendshipEntity::getUserId, currentUserId)
+                    .eq(FriendshipEntity::getFriendId, id)
+                    .eq(FriendshipEntity::getStatus, "accepted"));
+            if (accepted > 0) {
+                friendshipStatus = "accepted";
+            } else {
+                long pending = friendshipMapper.selectCount(Wrappers.<FriendshipEntity>lambdaQuery()
+                        .eq(FriendshipEntity::getUserId, currentUserId)
+                        .eq(FriendshipEntity::getFriendId, id)
+                        .eq(FriendshipEntity::getStatus, "pending"));
+                if (pending > 0) {
+                    friendshipStatus = "pending";
+                }
+            }
+
+            // Check follow
+            long iFollow = followMapper.selectCount(Wrappers.<FollowEntity>lambdaQuery()
+                    .eq(FollowEntity::getFollowerId, currentUserId)
+                    .eq(FollowEntity::getFollowedId, id));
+            long theyFollow = followMapper.selectCount(Wrappers.<FollowEntity>lambdaQuery()
+                    .eq(FollowEntity::getFollowerId, id)
+                    .eq(FollowEntity::getFollowedId, currentUserId));
+            if (iFollow > 0 && theyFollow > 0) {
+                followStatus = "mutual";
+            } else if (iFollow > 0) {
+                followStatus = "following";
+            } else if (theyFollow > 0) {
+                followStatus = "followed";
+            }
         }
 
-        return ApiResponse.ok(Map.of(
-                "id", user.getId(),
-                "nickname", user.getNickname(),
-                "avatar_url", user.getAvatarUrl() == null ? "" : user.getAvatarUrl(),
-                "gender", user.getGender() == null ? "" : user.getGender(),
-                "bio", user.getBio() == null ? "" : user.getBio(),
-                "interest_tags", user.getInterestTags() == null ? List.of() : user.getInterestTags(),
-                "role", user.getRole(),
-                "credit_score", user.getCreditScore(),
-                "created_at", user.getCreatedAt() == null ? "" : user.getCreatedAt().toString(),
-                "stats", Map.of(
-                        "activity_count", activityCount,
-                        "follower_count", followerCount,
-                        "following_count", followingCount
-                )
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("id", user.getId());
+        result.put("nickname", user.getNickname());
+        result.put("avatar_url", user.getAvatarUrl() == null ? "" : user.getAvatarUrl());
+        result.put("gender", user.getGender() == null ? "" : user.getGender());
+        result.put("bio", user.getBio() == null ? "" : user.getBio());
+        result.put("interest_tags", user.getInterestTags() == null ? List.of() : user.getInterestTags());
+        result.put("role", user.getRole());
+        result.put("credit_score", user.getCreditScore());
+        result.put("created_at", user.getCreatedAt() == null ? "" : user.getCreatedAt().toString());
+        result.put("friendship_status", friendshipStatus);
+        result.put("follow_status", followStatus);
+        result.put("stats", Map.of(
+                "activity_count", activityCount,
+                "follower_count", followerCount,
+                "following_count", followingCount
         ));
+        return ApiResponse.ok(result);
     }
 
     @GetMapping("/check-nickname")

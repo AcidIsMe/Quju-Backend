@@ -8,7 +8,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,12 +25,12 @@ public class CheckInController {
     }
 
     @GetMapping("/list")
-    public ApiResponse<List<Map<String, Object>>> list(@PathVariable String activityId) {
-        return ApiResponse.ok(checkInService.list(activityId));
+    public ApiResponse<Map<String, Object>> list(@PathVariable String activityId) {
+        return ApiResponse.ok(checkInService.list(activityId, SecurityUtil.requireCurrentUserId()));
     }
 
     @PostMapping("/qrcode")
     public ApiResponse<Map<String, Object>> qrcode(@PathVariable String activityId) {
-        return ApiResponse.ok(checkInService.qrcode(activityId));
+        return ApiResponse.ok(checkInService.qrcode(activityId, SecurityUtil.requireCurrentUserId()));
     }
 }

@@ -43,3 +43,9 @@ quju:
     refresh-token-ttl-seconds: 604800
   files:
     upload-dir: uploads
+  ai:
+    siliconflow:
+      api-key: sk-kkcdcrgrcefalxqbhzovakhuqcvgymdnayfooazpsyyyrlti
+      model: Pro/deepseek-ai/DeepSeek-V3.2
+      base-url: https://api.siliconflow.cn/v1
+      timeout-seconds: 15

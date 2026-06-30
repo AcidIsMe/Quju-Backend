@@ -200,10 +200,23 @@ public class ActivityServiceImpl implements ActivityService {
     }
 
     @Override
-    public List<RegistrationEntity> participants(String id) {
+    public List<Map<String, Object>> participants(String id) {
         return registrationMapper.selectList(Wrappers.<RegistrationEntity>lambdaQuery()
-                .eq(RegistrationEntity::getActivityId, id)
-                .ne(RegistrationEntity::getStatus, "cancelled"));
+                        .eq(RegistrationEntity::getActivityId, id)
+                        .ne(RegistrationEntity::getStatus, "cancelled"))
+                .stream()
+                .map(reg -> {
+                    UserEntity user = userMapper.selectById(reg.getUserId());
+                    Map<String, Object> item = new java.util.HashMap<>();
+                    item.put("user_id", reg.getUserId());
+                    item.put("nickname", user != null ? user.getNickname() : "");
+                    item.put("avatar_url", user != null ? user.getAvatarUrl() : "");
+                    item.put("status", reg.getStatus());
+                    item.put("checked_in", "checked_in".equals(reg.getStatus()));
+                    item.put("created_at", reg.getCreatedAt() == null ? "" : reg.getCreatedAt().toString());
+                    return item;
+                })
+                .toList();
     }
 
     @Override

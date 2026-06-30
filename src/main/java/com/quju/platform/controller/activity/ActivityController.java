@@ -3,7 +3,6 @@ package com.quju.platform.controller.activity;
 import com.quju.platform.dto.activity.ActivityCreateReq;
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.entity.ActivityEntity;
-import com.quju.platform.entity.RegistrationEntity;
 import com.quju.platform.service.ActivityService;
 import com.quju.platform.util.SecurityUtil;
 import jakarta.validation.Valid;
@@ -47,7 +46,7 @@ public class ActivityController {
     }
 
     @GetMapping("/{id}/participants")
-    public ApiResponse<List<RegistrationEntity>> participants(@PathVariable String id) {
+    public ApiResponse<List<Map<String, Object>>> participants(@PathVariable String id) {
         return ApiResponse.ok(activityService.participants(id));
     }
 

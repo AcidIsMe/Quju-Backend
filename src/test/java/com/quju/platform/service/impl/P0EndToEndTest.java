@@ -213,7 +213,7 @@ class P0EndToEndTest {
 
         // 检查参与者列表
         authenticateAs(adminId, "admin");
-        List<com.quju.platform.entity.RegistrationEntity> participants =
+        List<Map<String, Object>> participants =
                 activityService.participants(activityId);
         assertEquals(1, participants.size(), "参与者列表应有1人");
         System.out.println("[P0] 10. 参与者列表确认 ✓");

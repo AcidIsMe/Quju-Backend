@@ -16,6 +16,11 @@ public class WaitlistController {
 
     private final RegistrationService registrationService;
 
+    @GetMapping("/waitlist-position")
+    public ApiResponse<Map<String, Object>> position(@PathVariable String activityId) {
+        return ApiResponse.ok(registrationService.getWaitlistPosition(activityId, SecurityUtil.requireCurrentUserId()));
+    }
+
     @PostMapping("/join-waitlist")
     public ApiResponse<Map<String, Object>> join(@PathVariable String activityId) {
         WaitlistEntity item = registrationService.joinWaitlist(activityId, SecurityUtil.requireCurrentUserId());

@@ -15,6 +15,10 @@ public class SessionManager {
         sessions.put(userId, session);
     }
 
+    public WebSocketSession get(String userId) {
+        return sessions.get(userId);
+    }
+
     public void remove(String userId) {
         sessions.remove(userId);
     }
