@@ -6,6 +6,7 @@ import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.entity.*;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.*;
+import com.quju.platform.service.ActivityService;
 import com.quju.platform.service.MerchantService;
 import com.quju.platform.service.NotificationService;
 import com.quju.platform.util.SecurityUtil;
@@ -29,6 +30,7 @@ public class OpsAdminController {
     private final MerchantProfileMapper merchantProfileMapper;
     private final MerchantService merchantService;
     private final ActivityMapper activityMapper;
+    private final ActivityService activityService;
     private final TeamMapper teamMapper;
     private final ActivityStateMachine activityStateMachine;
     private final NotificationService notificationService;
@@ -161,6 +163,16 @@ public class OpsAdminController {
         List<ActivityEntity> pageRows = trimPage(rows, size);
         List<Map<String, Object>> data = pageRows.stream().map(this::activityItem).toList();
         return ApiResponse.page(data, pagination(rows, pageRows, size, activity -> cursorOf(activity.getCreatedAt(), activity.getId())));
+    }
+
+    @GetMapping("/activities/{id}")
+    public ApiResponse<Map<String, Object>> activityDetail(@PathVariable String id) {
+        Map<String, Object> detail = activityService.detailWithAggregation(id, null);
+        // 修复 key 名：前端期望 created_at，后端 detailWithAggregation 返回 create_at
+        if (detail.containsKey("create_at")) {
+            detail.put("created_at", detail.remove("create_at"));
+        }
+        return ApiResponse.ok(detail);
     }
 
     @PostMapping("/activities/{id}/review")
