@@ -208,6 +208,9 @@ public class UserController {
                 activityInfo.put("status", activity.getStatus());
                 activityInfo.put("max_participants", activity.getMaxParticipants());
                 activityInfo.put("current_participants", activity.getCurrentParticipants());
+                activityInfo.put("tags", activity.getTags());
+                activityInfo.put("fee_type", activity.getFeeType());
+                activityInfo.put("fee_amount", activity.getFeeAmount());
                 item.put("activity", activityInfo);
             }
             combined.add(item);
