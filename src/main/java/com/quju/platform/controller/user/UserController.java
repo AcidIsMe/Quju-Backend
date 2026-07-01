@@ -68,13 +68,24 @@ public class UserController {
             user.setNickname(nickname);
         }
         if (body.containsKey("avatar_url")) {
-            user.setAvatarUrl(String.valueOf(body.get("avatar_url")));
+            Object val = body.get("avatar_url");
+            user.setAvatarUrl(val == null ? null : String.valueOf(val));
         }
         if (body.containsKey("gender")) {
-            user.setGender(String.valueOf(body.get("gender")));
+            Object val = body.get("gender");
+            user.setGender(val == null ? null : String.valueOf(val));
         }
         if (body.containsKey("birthday")) {
-            user.setBirthday(LocalDate.parse(String.valueOf(body.get("birthday"))));
+            Object val = body.get("birthday");
+            if (val == null || String.valueOf(val).isBlank()) {
+                user.setBirthday(null);
+            } else {
+                try {
+                    user.setBirthday(LocalDate.parse(String.valueOf(val)));
+                } catch (Exception e) {
+                    throw new BusinessException(40000, "生日日期格式无效，请使用 yyyy-MM-dd 格式");
+                }
+            }
         }
         if (body.containsKey("bio")) {
             String bio = String.valueOf(body.get("bio"));
@@ -86,7 +97,11 @@ public class UserController {
         if (body.containsKey("interest_tags")) {
             Object tags = body.get("interest_tags");
             if (tags instanceof List<?> tagList) {
-                user.setInterestTags((List<String>) tagList);
+                List<String> safeTags = tagList.stream()
+                        .filter(t -> t instanceof String && !((String) t).isBlank())
+                        .map(t -> (String) t)
+                        .toList();
+                user.setInterestTags(safeTags);
             }
         }
         userMapper.updateById(user);

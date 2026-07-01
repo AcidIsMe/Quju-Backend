@@ -22,7 +22,11 @@ public class AiController {
 
     @PostMapping("/generate-activity")
     public ApiResponse<AiFormSchemaResp> generate(@RequestBody Map<String, String> body) {
-        return ApiResponse.ok(llmClient.generateActivity(body.get("topic")));
+        String topic = body.get("topic");
+        if (topic == null || topic.isBlank()) {
+            return ApiResponse.fail(40010, "活动主题不能为空，请输入一个主题词或短语");
+        }
+        return ApiResponse.ok(llmClient.generateActivity(topic));
     }
 
     @PostMapping("/classify-images")
