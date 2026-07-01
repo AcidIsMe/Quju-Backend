@@ -52,6 +52,12 @@
         <if test="startBefore != null and startBefore != ''">
           AND start_time &lt;= #{startBefore}
         </if>
+        <if test="activityTypes != null and activityTypes != ''">
+          AND activity_type IN
+          <foreach item="type" collection="activityTypes.split(',')" open="(" separator="," close=")">
+              #{type}
+          </foreach>
+        </if>
         ORDER BY relevance_score DESC, created_at DESC, id DESC
         LIMIT #{limit}
     </select>

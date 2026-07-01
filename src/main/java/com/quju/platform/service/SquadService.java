@@ -1,6 +1,7 @@
 package com.quju.platform.service;
 
 import com.quju.platform.dto.social.SquadCreateReq;
+import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.TeamEntity;
 import com.quju.platform.entity.TeamJoinRequestEntity;
 
@@ -21,4 +22,6 @@ public interface SquadService {
     List<TeamJoinRequestEntity> joinRequests(String id, String userId);
     void approveRequest(String id, String userId, String requestId);
     void rejectRequest(String id, String userId, String requestId);
+    List<SquadPointsRankResp> leaderboard(String teamId);
+    void addPoints(String teamId, String userId, int points);
 }

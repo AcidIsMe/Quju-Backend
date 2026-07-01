@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     team_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     role VARCHAR(10) NOT NULL DEFAULT 'member',
+    points INT NOT NULL DEFAULT 0,
     joined_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     UNIQUE KEY uk_team_members_team_user (team_id, user_id),
     INDEX idx_team_members_user (user_id)
@@ -351,6 +352,17 @@ SET @sql = IF(
      WHERE table_schema = DATABASE() AND table_name = 'activities' AND index_name = 'idx_activities_fee_type') = 0,
     'CREATE INDEX idx_activities_fee_type ON activities (fee_type)',
     'SELECT ''idx_activities_fee_type already exists'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 迭代2：team_members 增加积分字段
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'team_members' AND column_name = 'points') = 0,
+    'ALTER TABLE team_members ADD COLUMN points INT NOT NULL DEFAULT 0 AFTER role',
+    'SELECT ''points already exists'''
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;

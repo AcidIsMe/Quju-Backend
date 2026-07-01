@@ -3,6 +3,7 @@ package com.quju.platform.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.quju.platform.dto.social.SquadCreateReq;
+import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.*;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.*;
@@ -13,9 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -375,5 +378,38 @@ public class SquadServiceImpl implements SquadService {
                 "您加入小队的申请已被拒绝",
                 Map.of("team_id", id)
         );
+    }
+
+    @Override
+    public List<SquadPointsRankResp> leaderboard(String teamId) {
+        TeamEntity team = detail(teamId);
+        List<TeamMemberEntity> members = teamMemberMapper.selectList(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .orderByDesc(TeamMemberEntity::getPoints));
+        AtomicInteger rank = new AtomicInteger(1);
+        return members.stream()
+                .map(m -> {
+                    UserEntity user = userMapper.selectById(m.getUserId());
+                    return SquadPointsRankResp.builder()
+                            .userId(m.getUserId())
+                            .nickname(user != null ? user.getNickname() : "未知")
+                            .points(m.getPoints() == null ? 0 : m.getPoints())
+                            .rank(rank.getAndIncrement())
+                            .build();
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void addPoints(String teamId, String userId, int points) {
+        TeamMemberEntity member = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, userId));
+        if (member == null) {
+            throw new BusinessException(40404, "用户不是小队成员");
+        }
+        member.setPoints((member.getPoints() == null ? 0 : member.getPoints()) + points);
+        teamMemberMapper.updateById(member);
     }
 }

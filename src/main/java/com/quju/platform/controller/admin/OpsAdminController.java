@@ -32,6 +32,7 @@ public class OpsAdminController {
     private final ActivityMapper activityMapper;
     private final ActivityService activityService;
     private final TeamMapper teamMapper;
+    private final TeamMemberMapper teamMemberMapper;
     private final ActivityStateMachine activityStateMachine;
     private final NotificationService notificationService;
 
@@ -281,28 +282,140 @@ public class OpsAdminController {
     }
 
     @GetMapping("/teams")
-    public ApiResponse<List<TeamEntity>> teams(@RequestParam(required = false) String cursor,
-                                               @RequestParam(defaultValue = "20") Integer limit) {
+    public ApiResponse<List<Map<String, Object>>> teams(@RequestParam(required = false) String cursor,
+                                                       @RequestParam(defaultValue = "20") Integer limit) {
         int size = normalizedLimit(limit);
         var wrapper = Wrappers.<TeamEntity>lambdaQuery();
         applyTeamCursor(wrapper, cursor);
         wrapper.orderByDesc(TeamEntity::getCreatedAt).orderByDesc(TeamEntity::getId);
         List<TeamEntity> rows = teamMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
         List<TeamEntity> pageRows = trimPage(rows, size);
-        return ApiResponse.page(pageRows, pagination(rows, pageRows, size, team -> cursorOf(team.getCreatedAt(), team.getId())));
+        List<Map<String, Object>> enriched = pageRows.stream().map(team -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", team.getId());
+            item.put("name", team.getName());
+            item.put("description", team.getDescription());
+            item.put("interest_tags", team.getInterestTags());
+            item.put("join_type", team.getJoinType());
+            item.put("max_members", team.getMaxMembers());
+            item.put("current_members", team.getCurrentMembers());
+            item.put("status", team.getStatus());
+            item.put("created_at", team.getCreatedAt());
+            UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
+            item.put("leader", leader == null ? null : Map.of(
+                    "id", leader.getId(),
+                    "nickname", leader.getNickname(),
+                    "avatar_url", leader.getAvatarUrl()
+            ));
+            long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
+                    .eq(ActivityEntity::getTeamId, team.getId())
+                    .eq(ActivityEntity::getTeamActivity, true));
+            item.put("activity_count", activityCount);
+            return item;
+        }).toList();
+        return ApiResponse.page(enriched, pagination(rows, pageRows, size, team -> cursorOf(team.getCreatedAt(), team.getId())));
     }
 
     @GetMapping("/teams/{id}")
-    public ApiResponse<TeamEntity> team(@PathVariable String id) {
-        return ApiResponse.ok(teamMapper.selectById(id));
+    public ApiResponse<Map<String, Object>> team(@PathVariable String id) {
+        TeamEntity team = teamMapper.selectById(id);
+        if (team == null) {
+            throw new BusinessException(40404, "小队不存在");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", team.getId());
+        result.put("name", team.getName());
+        result.put("description", team.getDescription());
+        result.put("interest_tags", team.getInterestTags());
+        result.put("join_type", team.getJoinType());
+        result.put("max_members", team.getMaxMembers());
+        result.put("current_members", team.getCurrentMembers());
+        result.put("avatar_url", team.getAvatarUrl());
+        result.put("status", team.getStatus());
+        result.put("created_at", team.getCreatedAt());
+        result.put("updated_at", team.getUpdatedAt());
+        // 队长信息
+        UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
+        result.put("leader", leader == null ? null : Map.of(
+                "id", leader.getId(),
+                "nickname", leader.getNickname(),
+                "avatar_url", leader.getAvatarUrl(),
+                "email", leader.getEmail()
+        ));
+        // 活动数统计
+        long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
+                .eq(ActivityEntity::getTeamId, id)
+                .eq(ActivityEntity::getTeamActivity, true));
+        result.put("activity_count", activityCount);
+        // 成员列表（精简）
+        List<TeamMemberEntity> members = teamMemberMapper.selectList(
+                Wrappers.<TeamMemberEntity>lambdaQuery()
+                        .eq(TeamMemberEntity::getTeamId, id)
+                        .orderByAsc(TeamMemberEntity::getJoinedAt));
+        result.put("members", members.stream().map(m -> {
+            UserEntity u = userMapper.selectById(m.getUserId());
+            Map<String, Object> mi = new LinkedHashMap<>();
+            mi.put("user_id", m.getUserId());
+            mi.put("role", m.getRole());
+            mi.put("points", m.getPoints());
+            mi.put("nickname", u != null ? u.getNickname() : null);
+            mi.put("avatar_url", u != null ? u.getAvatarUrl() : null);
+            mi.put("email", u != null ? u.getEmail() : null);
+            mi.put("joined_at", m.getJoinedAt());
+            return mi;
+        }).toList());
+        return ApiResponse.ok(result);
+    }
+
+    @GetMapping("/teams/{id}/members")
+    public ApiResponse<List<Map<String, Object>>> teamMembers(@PathVariable String id) {
+        List<TeamMemberEntity> memberRecords = teamMemberMapper.selectList(
+                Wrappers.<TeamMemberEntity>lambdaQuery()
+                        .eq(TeamMemberEntity::getTeamId, id)
+                        .orderByAsc(TeamMemberEntity::getJoinedAt));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TeamMemberEntity m : memberRecords) {
+            UserEntity user = userMapper.selectById(m.getUserId());
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("id", m.getId());
+            info.put("user_id", m.getUserId());
+            info.put("role", m.getRole());
+            info.put("points", m.getPoints());
+            info.put("joined_at", m.getJoinedAt());
+            info.put("nickname", user != null ? user.getNickname() : null);
+            info.put("avatar_url", user != null ? user.getAvatarUrl() : null);
+            info.put("email", user != null ? user.getEmail() : null);
+            result.add(info);
+        }
+        return ApiResponse.ok(result);
     }
 
     @PostMapping("/teams/{id}/disable")
-    public ApiResponse<Void> disableTeam(@PathVariable String id) {
+    public ApiResponse<Void> disableTeam(@PathVariable String id,
+                                         @RequestBody(required = false) Map<String, String> body) {
         TeamEntity team = teamMapper.selectById(id);
-        if (team != null) {
-            team.setStatus("disabled");
-            teamMapper.updateById(team);
+        if (team == null) {
+            throw new BusinessException(40404, "小队不存在");
+        }
+        if (!"active".equals(team.getStatus())) {
+            throw new BusinessException(40001, "小队当前状态不可停用");
+        }
+        // US42: 停用原因必填
+        String reason = body == null ? null : body.get("reason");
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(40020, "停用原因必填");
+        }
+        team.setStatus("disabled");
+        teamMapper.updateById(team);
+        // 通知小队长
+        if (team.getLeaderId() != null) {
+            notificationService.notify(
+                    team.getLeaderId(),
+                    "team_disabled",
+                    "小队已停用",
+                    "您的小队「" + team.getName() + "」已被管理员停用，原因：" + reason,
+                    Map.of("team_id", id, "reason", reason)
+            );
         }
         return ApiResponse.ok();
     }
@@ -310,9 +423,20 @@ public class OpsAdminController {
     @PostMapping("/teams/{id}/restore")
     public ApiResponse<Void> restoreTeam(@PathVariable String id) {
         TeamEntity team = teamMapper.selectById(id);
-        if (team != null) {
-            team.setStatus("active");
-            teamMapper.updateById(team);
+        if (team == null) {
+            throw new BusinessException(40404, "小队不存在");
+        }
+        team.setStatus("active");
+        teamMapper.updateById(team);
+        // 通知小队长
+        if (team.getLeaderId() != null) {
+            notificationService.notify(
+                    team.getLeaderId(),
+                    "team_restored",
+                    "小队已恢复",
+                    "您的小队「" + team.getName() + "」已被管理员恢复，所有功能已正常。",
+                    Map.of("team_id", id)
+            );
         }
         return ApiResponse.ok();
     }

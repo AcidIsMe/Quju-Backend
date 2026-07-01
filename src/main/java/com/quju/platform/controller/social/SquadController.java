@@ -2,6 +2,7 @@ package com.quju.platform.controller.social;
 
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.dto.social.SquadCreateReq;
+import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.TeamEntity;
 import com.quju.platform.entity.TeamJoinRequestEntity;
 import com.quju.platform.service.SquadService;
@@ -95,6 +96,20 @@ public class SquadController {
     public ApiResponse<Void> rejectRequest(@PathVariable String id,
                                            @PathVariable String requestId) {
         squadService.rejectRequest(id, SecurityUtil.requireCurrentUserId(), requestId);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/{id}/leaderboard")
+    public ApiResponse<List<SquadPointsRankResp>> leaderboard(@PathVariable String id) {
+        return ApiResponse.ok(squadService.leaderboard(id));
+    }
+
+    @PostMapping("/{id}/points")
+    public ApiResponse<Void> addPoints(@PathVariable String id,
+                                       @RequestBody Map<String, Object> body) {
+        String targetUserId = (String) body.get("user_id");
+        int points = body.get("points") instanceof Integer ? (Integer) body.get("points") : 0;
+        squadService.addPoints(id, targetUserId, points);
         return ApiResponse.ok();
     }
 }

@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     team_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     role VARCHAR(10) NOT NULL DEFAULT 'member',
+    points INT NOT NULL DEFAULT 0,
     joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (team_id, user_id)
 );
