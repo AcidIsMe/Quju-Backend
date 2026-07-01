@@ -1,6 +1,7 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.quju.platform.dto.auth.ChangePasswordReq;
 import com.quju.platform.dto.auth.LoginReq;
 import com.quju.platform.dto.auth.MerchantApplyReq;
 import com.quju.platform.dto.auth.RegisterReq;
@@ -180,6 +181,22 @@ public class AuthServiceImpl implements AuthService {
             stored.setRevokedAt(LocalDateTime.now());
             refreshTokenMapper.updateById(stored);
         }
+    }
+
+    @Override
+    public void changePassword(String userId, ChangePasswordReq req) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(40401, "用户不存在");
+        }
+        if (!passwordEncoder.matches(req.getOldPassword(), user.getPasswordHash())) {
+            throw new BusinessException(40007, "原密码错误");
+        }
+        if (!req.getNewPassword().matches("^(?=.*[A-Za-z])(?=.*\\d).+$")) {
+            throw new BusinessException(40002, "新密码不合规");
+        }
+        user.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        userMapper.updateById(user);
     }
 
     private UserEntity createUser(String email, String password, String nickname, String role) {

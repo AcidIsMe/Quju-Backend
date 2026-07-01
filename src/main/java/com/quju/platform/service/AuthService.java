@@ -1,5 +1,6 @@
 package com.quju.platform.service;
 
+import com.quju.platform.dto.auth.ChangePasswordReq;
 import com.quju.platform.dto.auth.LoginReq;
 import com.quju.platform.dto.auth.MerchantApplyReq;
 import com.quju.platform.dto.auth.RegisterReq;
@@ -14,4 +15,5 @@ public interface AuthService {
     void activate(String token);
     void resendActivation(String email);
     void logout(String refreshToken);
+    void changePassword(String userId, ChangePasswordReq req);
 }

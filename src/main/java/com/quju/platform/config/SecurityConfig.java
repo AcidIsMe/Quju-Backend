@@ -44,6 +44,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(registry -> registry
+                        .requestMatchers(HttpMethod.PUT, "/auth/password").authenticated()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/discover/**").permitAll()
                         .requestMatchers("/ai/**").permitAll()

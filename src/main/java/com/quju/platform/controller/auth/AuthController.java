@@ -1,17 +1,20 @@
 package com.quju.platform.controller.auth;
 
+import com.quju.platform.dto.auth.ChangePasswordReq;
 import com.quju.platform.dto.auth.LoginReq;
 import com.quju.platform.dto.auth.MerchantApplyReq;
 import com.quju.platform.dto.auth.RegisterReq;
 import com.quju.platform.dto.auth.TokenRefreshReq;
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.service.AuthService;
+import com.quju.platform.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -64,5 +67,12 @@ public class AuthController {
     public ApiResponse<Void> resendActivation(@RequestBody Map<String, String> body) {
         authService.resendActivation(body.get("email"));
         return ApiResponse.ok("激活邮件已重新发送", null);
+    }
+
+    @PutMapping("/password")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordReq req) {
+        String userId = SecurityUtil.requireCurrentUserId();
+        authService.changePassword(userId, req);
+        return ApiResponse.ok("密码修改成功", null);
     }
 }
