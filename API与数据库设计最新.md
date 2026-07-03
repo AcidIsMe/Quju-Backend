@@ -232,7 +232,11 @@ users ──1:N── user_bans
 
 ---
 
-### 1\.3 活动关键词搜索配置
+#### 1\.2\.21 group\_chat\_read\_markers（群聊已读标记）
+
+**索引：** UNIQUE\(group\_id, user\_id\), INDEX\(user\_id\)
+
+---### 1\.3 活动关键词搜索配置
 
 迭代 1 优先保证中文关键词可用，采用标题/简介包含匹配 \+ 标签数组匹配：
 
@@ -1511,7 +1515,78 @@ images: [file1, file2, file3, ...]
 
 #### GET `/api/teams/:id`
 
-小队详情
+小队详情（含队长信息、成员列表、活动数）
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": {
+    "id": "uuid",
+    "name": "周末徒步小队",
+    "description": "热爱徒步的一群人",
+    "interest_tags": ["户外","徒步"],
+    "join_type": "review",
+    "max_members": 50,
+    "current_members": 10,
+    "avatar_url": "https://...",
+    "status": "active",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-06-01T00:00:00Z",
+    "leader": {
+      "id": "uuid",
+      "nickname": "张三",
+      "avatar_url": "https://..."
+    },
+    "activity_count": 5,
+    "members": [
+      {
+        "user_id": "uuid",
+        "role": "leader",
+        "points": 100,
+        "nickname": "张三",
+        "avatar_url": "https://...",
+        "joined_at": "2024-01-01T00:00:00Z"
+      },
+      {
+        "user_id": "uuid",
+        "role": "member",
+        "points": 30,
+        "nickname": "李四",
+        "avatar_url": "https://...",
+        "joined_at": "2024-01-05T00:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/api/teams/:id/members`
+
+获取小队成员列表
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "role": "leader",
+      "points": 100,
+      "joined_at": "2024-01-01T00:00:00Z",
+      "nickname": "张三",
+      "avatar_url": "https://...",
+      "email": "user@example.com"
+    }
+  ]
+}
+```
 
 ---
 
@@ -1743,6 +1818,34 @@ images: [file1, file2, file3, ...]
 
 ---
 
+#### GET `/api/admin/teams/:id/members`
+
+成员列表（需 admin 角色）
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "role": "leader",
+      "points": 100,
+      "joined_at": "2024-01-01T00:00:00Z",
+      "nickname": "张三",
+      "avatar_url": "https://...",
+      "email": "user@example.com"
+    }
+  ]
+}
+```
+
+---
+
 #### POST `/api/admin/teams/:id/disable`
 
 停用小队
@@ -1798,7 +1901,10 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 ### 2\.18 即时通讯模块 \(IM\)
 
-> 好友在线聊天功能。私聊基于好友关系，仅互为好友的用户才能发送消息。
+> 即时通讯支持私聊和群聊两种模式。私聊基于好友关系，仅互为好友的用户才能发送消息；群聊基于小队（Teams）成员关系，仅小队成员可发送和接收群消息。私聊与群聊共用 `im_messages` 表，通过 `entity_type` 区分。
+> 
+> - `entity_type = "private"` 私聊，`entity_id` 格式为 `"{userAId}:{userBId}"`（字母序拼接）
+> - `entity_type = "group"` 群聊，`entity_id` 格式为 `"team:{teamId}"`
 > 
 > 
 
@@ -1823,6 +1929,7 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 **send\_message 请求格式：**
 
+**私聊：**
 ```JSON
 {
   "type": "send_message",
@@ -1833,8 +1940,24 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 }
 ```
 
+**群聊：**
+```JSON
+{
+  "type": "send_message",
+  "entity_type": "group",
+  "entity_id": "team:{teamId}",
+  "content": "大家好！",
+  "msg_type": "text"
+}
+```
+
+**校验规则：**
+- `entity_type = "private"` → 校验双方是否为好友关系（双向 accepted）
+- `entity_type = "group"` → 校验发送方是否为 `entity_id` 对应小队的成员
+
 **new\_message 推送格式：**
 
+**私聊推送：**
 ```JSON
 {
   "type": "new_message",
@@ -1847,8 +1970,22 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 }
 ```
 
+**群聊推送：**（广播给所有在线群成员）
+```JSON
+{
+  "type": "new_message",
+  "message_id": "uuid",
+  "entity_type": "group",
+  "entity_id": "team:{teamId}",
+  "sender_id": "uuid",
+  "content": "大家好！",
+  "created_at": "2024-06-15T10:00:00"
+}
+```
+
 **typing 格式：**
 
+**私聊：**
 ```JSON
 {
   "type": "typing",
@@ -1858,13 +1995,33 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 }
 ```
 
+**群聊：**（广播给除发送方外的所有在线群成员）
+```JSON
+{
+  "type": "typing",
+  "entity_type": "group",
+  "entity_id": "team:{teamId}",
+  "user_id": "uuid"
+}
+```
+
 **mark\_read 格式：**
 
+**私聊：**
 ```JSON
 {
   "type": "mark_read",
   "entity_type": "private",
   "entity_id": "userAId:userBId"
+}
+```
+
+**群聊：**（更新用户在群中的最后阅读时间）
+```JSON
+{
+  "type": "mark_read",
+  "entity_type": "group",
+  "entity_id": "team:{teamId}"
 }
 ```
 
@@ -1878,6 +2035,7 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 **Request:**
 
+**私聊：**
 ```JSON
 {
   "entity_type": "private",
@@ -1890,10 +2048,23 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 }
 ```
 
-**校验规则：**
+**群聊：**
+```JSON
+{
+  "entity_type": "group",
+  "entity_id": "team:{teamId}",
+  "type": "text",
+  "content": "大家好！",
+  "mention_all": false,
+  "mention_user_ids": [],
+  "metadata": {}
+}
+```
 
-- `entity_type = "private"` 时，自动校验当前用户与对方是否为好友关系
-- `entity_id` 格式为两个 userId 按字母序拼接，以 `:` 分隔
+**校验规则：**
+- `entity_type = "private"` → 校验当前用户与对方是否为好友关系
+- `entity_type = "group"` → 校验当前用户是否为该小队的成员
+- `entity_id` 私聊格式为两个 userId 按字母序拼接，以 `:` 分隔；群聊格式为 `team:` + 小队ID
 
 **Response \(200\):**
 
@@ -1913,7 +2084,10 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 }
 ```
 
-**错误码：** 40300=不是好友关系，无法发送消息, 40000=私聊entity_id格式错误
+**错误码：**
+- 40300=不是好友关系，无法发送消息
+- 40300=您不是该群聊成员，无法发送消息
+- 40000=私聊entity_id格式错误
 
 ---
 
@@ -1980,7 +2154,7 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 #### GET `/api/im/conversations`
 
-获取会话列表（按最后消息时间倒序）
+获取会话列表（按最后消息时间倒序），返回混合了私聊和群聊的列表。
 
 **Header:** Authorization: Bearer `<access_token>`
 
@@ -2002,24 +2176,51 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
       "last_sender_id": "uuid",
       "last_message_recalled": false,
       "unread_count": 3
+    },
+    {
+      "entity_type": "group",
+      "entity_id": "team:{teamId}",
+      "group_id": "uuid",
+      "group_name": "周末徒步小队",
+      "group_avatar_url": "https://...",
+      "last_message": "大家好！",
+      "last_message_type": "text",
+      "last_message_time": "2024-06-15T09:30:00",
+      "last_sender_id": "uuid",
+      "last_message_recalled": false,
+      "unread_count": 5
     }
   ]
 }
 ```
 
+**响应字段说明：**
+- `entity_type = "private"` 时，返回 `other_user_id`、`other_nickname`、`other_avatar_url`
+- `entity_type = "group"` 时，返回 `group_id`、`group_name`、`group_avatar_url`
+
 ---
 
 #### POST `/api/im/messages/read`
 
-标记会话已读
+标记会话已读（私聊和群聊均支持）
 
 **Header:** Authorization: Bearer `<access_token>`
 
 **Query:**
 
+**私聊：**
 ```Plain Text
 ?entity_type=private&entity_id=userAId:userBId
 ```
+
+**群聊：**
+```Plain Text
+?entity_type=group&entity_id=team:{teamId}
+```
+
+**处理逻辑：**
+- 私聊：将对方发送的未读消息逐条标记 `read_at`
+- 群聊：更新 `group_chat_read_markers` 表中该用户在该群聊的 `last_read_at` 为当前时间
 
 **Response \(200\):**
 
@@ -2031,15 +2232,25 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 #### GET `/api/im/messages/unread-count`
 
-获取指定会话的未读消息数
+获取指定会话的未读消息数（私聊和群聊均支持）
 
 **Header:** Authorization: Bearer `<access_token>`
 
 **Query:**
 
+**私聊：**
 ```Plain Text
 ?entity_type=private&entity_id=userAId:userBId
 ```
+
+**群聊：**
+```Plain Text
+?entity_type=group&entity_id=team:{teamId}
+```
+
+**未读数计算方式：**
+- 私聊：统计对方发送且 `read_at IS NULL` 的消息数
+- 群聊：统计 `created_at` 大于用户 `last_read_at` 且非自己发送的消息数
 
 **Response \(200\):**
 
@@ -2054,7 +2265,7 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 #### GET `/api/im/messages/total-unread`
 
-获取所有会话的总未读消息数
+获取所有会话的总未读消息数（含私聊和群聊）
 
 **Header:** Authorization: Bearer `<access_token>`
 
@@ -2074,6 +2285,11 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 > ✓ = 需 JWT, † = 需 admin 角色
 > 
 > 
+
+| 模块 | 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|------|
+| Teams | GET | `/api/teams/:id/members` | ✓ | 成员列表 |
+| Admin | GET | `/api/admin/teams/:id/members` | ✓† | 成员列表 |
 
 ---
 

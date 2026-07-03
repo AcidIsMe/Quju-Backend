@@ -256,6 +256,16 @@ CREATE TABLE IF NOT EXISTS im_messages (
     read_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS group_chat_read_markers (
+    id VARCHAR(36) PRIMARY KEY,
+    group_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    last_read_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (group_id, user_id)
+);
+
 ALTER TABLE IF EXISTS im_messages ALTER COLUMN entity_id VARCHAR(100) NOT NULL;
 
 -- 插入系统活动模板

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +31,7 @@ public class SquadServiceImpl implements SquadService {
     private final TeamJoinRequestMapper teamJoinRequestMapper;
     private final TeamBlacklistMapper teamBlacklistMapper;
     private final UserMapper userMapper;
+    private final ActivityMapper activityMapper;
     private final NotificationService notificationService;
 
     @Override
@@ -70,6 +72,63 @@ public class SquadServiceImpl implements SquadService {
             throw new BusinessException(40404, "小队不存在");
         }
         return team;
+    }
+
+    @Override
+    public Map<String, Object> detailWithMembers(String id) {
+        TeamEntity team = detail(id);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", team.getId());
+        result.put("name", team.getName());
+        result.put("description", team.getDescription());
+        result.put("interest_tags", team.getInterestTags());
+        result.put("join_type", team.getJoinType());
+        result.put("max_members", team.getMaxMembers());
+        result.put("current_members", team.getCurrentMembers());
+        result.put("avatar_url", team.getAvatarUrl());
+        result.put("status", team.getStatus());
+        result.put("created_at", team.getCreatedAt());
+        result.put("updated_at", team.getUpdatedAt());
+
+        // 队长信息
+        UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
+        if (leader != null) {
+            Map<String, Object> leaderMap = new LinkedHashMap<>();
+            leaderMap.put("id", leader.getId());
+            leaderMap.put("nickname", leader.getNickname());
+            leaderMap.put("avatar_url", leader.getAvatarUrl());
+            result.put("leader", leaderMap);
+        } else {
+            result.put("leader", null);
+        }
+
+        // 活动数统计
+        long activityCount = activityMapper.selectCount(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<ActivityEntity>lambdaQuery()
+                        .eq(ActivityEntity::getTeamId, id)
+                        .eq(ActivityEntity::getTeamActivity, true));
+        result.put("activity_count", activityCount);
+
+        // 成员列表
+        List<TeamMemberEntity> memberRecords = teamMemberMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<TeamMemberEntity>lambdaQuery()
+                        .eq(TeamMemberEntity::getTeamId, id)
+                        .orderByAsc(TeamMemberEntity::getJoinedAt));
+        List<Map<String, Object>> memberList = new ArrayList<>();
+        for (TeamMemberEntity m : memberRecords) {
+            UserEntity u = userMapper.selectById(m.getUserId());
+            Map<String, Object> mi = new LinkedHashMap<>();
+            mi.put("user_id", m.getUserId());
+            mi.put("role", m.getRole());
+            mi.put("points", m.getPoints());
+            mi.put("nickname", u != null ? u.getNickname() : null);
+            mi.put("avatar_url", u != null ? u.getAvatarUrl() : null);
+            mi.put("joined_at", m.getJoinedAt());
+            memberList.add(mi);
+        }
+        result.put("members", memberList);
+
+        return result;
     }
 
     @Override

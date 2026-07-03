@@ -33,8 +33,8 @@ public class SquadController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<TeamEntity> detail(@PathVariable String id) {
-        return ApiResponse.ok(squadService.detail(id));
+    public ApiResponse<Map<String, Object>> detail(@PathVariable String id) {
+        return ApiResponse.ok(squadService.detailWithMembers(id));
     }
 
     @PostMapping("/{id}/join")
