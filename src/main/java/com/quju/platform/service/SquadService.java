@@ -25,4 +25,6 @@ public interface SquadService {
     List<SquadPointsRankResp> leaderboard(String teamId);
     void addPoints(String teamId, String userId, int points);
     void transferLeader(String teamId, String currentLeaderId, String newLeaderId);
+    void addToBlacklist(String teamId, String operatorUserId, String targetUserId);
+    void removeFromBlacklist(String teamId, String operatorUserId, String targetUserId);
 }

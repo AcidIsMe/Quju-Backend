@@ -447,4 +447,66 @@ public class SquadServiceImpl implements SquadService {
         team.setLeaderId(newLeaderId);
         teamMapper.updateById(team);
     }
+
+    @Override
+    @Transactional
+    public void addToBlacklist(String teamId, String operatorUserId, String targetUserId) {
+        TeamEntity team = detail(teamId);
+        if (!"active".equals(team.getStatus())) {
+            throw new BusinessException(40001, "小队已解散");
+        }
+        // 只有队长或管理员可以操作黑名单
+        TeamMemberEntity operator = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, operatorUserId));
+        if (operator == null || (!"leader".equals(operator.getRole()) && !"admin".equals(operator.getRole()))) {
+            throw new BusinessException(40300, "只有队长或管理员可以管理黑名单");
+        }
+        // 不能将队长加入黑名单
+        if (targetUserId.equals(team.getLeaderId())) {
+            throw new BusinessException(40000, "不能将队长加入黑名单");
+        }
+        // 检查是否已在黑名单中
+        Long count = teamBlacklistMapper.selectCount(Wrappers.<TeamBlacklistEntity>lambdaQuery()
+                .eq(TeamBlacklistEntity::getTeamId, teamId)
+                .eq(TeamBlacklistEntity::getUserId, targetUserId));
+        if (count > 0) {
+            throw new BusinessException(40901, "该用户已在黑名单中");
+        }
+        // 加入黑名单
+        TeamBlacklistEntity blacklist = new TeamBlacklistEntity();
+        blacklist.setTeamId(teamId);
+        blacklist.setUserId(targetUserId);
+        teamBlacklistMapper.insert(blacklist);
+        // 如果是成员，同时移出小队
+        int deleted = teamMemberMapper.delete(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, targetUserId));
+        if (deleted > 0) {
+            team.setCurrentMembers(team.getCurrentMembers() - 1);
+            teamMapper.updateById(team);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void removeFromBlacklist(String teamId, String operatorUserId, String targetUserId) {
+        TeamEntity team = detail(teamId);
+        if (!"active".equals(team.getStatus())) {
+            throw new BusinessException(40001, "小队已解散");
+        }
+        // 只有队长或管理员可以操作黑名单
+        TeamMemberEntity operator = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, operatorUserId));
+        if (operator == null || (!"leader".equals(operator.getRole()) && !"admin".equals(operator.getRole()))) {
+            throw new BusinessException(40300, "只有队长或管理员可以管理黑名单");
+        }
+        int deleted = teamBlacklistMapper.delete(Wrappers.<TeamBlacklistEntity>lambdaQuery()
+                .eq(TeamBlacklistEntity::getTeamId, teamId)
+                .eq(TeamBlacklistEntity::getUserId, targetUserId));
+        if (deleted == 0) {
+            throw new BusinessException(40404, "该用户不在黑名单中");
+        }
+    }
 }
