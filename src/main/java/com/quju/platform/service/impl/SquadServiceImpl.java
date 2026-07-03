@@ -412,4 +412,39 @@ public class SquadServiceImpl implements SquadService {
         member.setPoints((member.getPoints() == null ? 0 : member.getPoints()) + points);
         teamMemberMapper.updateById(member);
     }
+
+    @Override
+    @Transactional
+    public void transferLeader(String teamId, String currentLeaderId, String newLeaderId) {
+        TeamEntity team = detail(teamId);
+        if (!"active".equals(team.getStatus())) {
+            throw new BusinessException(40001, "小队已解散");
+        }
+        if (!currentLeaderId.equals(team.getLeaderId())) {
+            throw new BusinessException(40300, "只有队长可以转让队长");
+        }
+        if (currentLeaderId.equals(newLeaderId)) {
+            throw new BusinessException(40000, "不能转让给自己");
+        }
+        TeamMemberEntity newLeader = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, newLeaderId));
+        if (newLeader == null) {
+            throw new BusinessException(40404, "目标用户不是小队成员");
+        }
+        // 原队长降级为管理员
+        TeamMemberEntity oldLeader = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, currentLeaderId));
+        if (oldLeader != null) {
+            oldLeader.setRole("admin");
+            teamMemberMapper.updateById(oldLeader);
+        }
+        // 新队长升级
+        newLeader.setRole("leader");
+        teamMemberMapper.updateById(newLeader);
+        // 更新小队队长ID
+        team.setLeaderId(newLeaderId);
+        teamMapper.updateById(team);
+    }
 }
