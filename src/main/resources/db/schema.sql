@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS im_messages (
     id VARCHAR(36) PRIMARY KEY,
     entity_type VARCHAR(30) NOT NULL,
-    entity_id VARCHAR(36) NOT NULL,
+    entity_id VARCHAR(100) NOT NULL,
     sender_id VARCHAR(36) NOT NULL,
     type VARCHAR(20) NOT NULL DEFAULT 'text',
     content TEXT,
@@ -289,6 +289,17 @@ CREATE TABLE IF NOT EXISTS im_messages (
     read_at DATETIME(3),
     INDEX idx_im_messages_entity_created (entity_type, entity_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 扩展 entity_id 字段长度以支持私聊 "uuid:uuid" 格式
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'im_messages' AND column_name = 'entity_id' AND character_maximum_length < 100) > 0,
+    'ALTER TABLE im_messages MODIFY COLUMN entity_id VARCHAR(100) NOT NULL',
+    'SELECT ''entity_id already sufficient'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
 SELECT 'tpl_hiking', '户外徒步', '户外徒步', '一场轻松的户外徒步活动', JSON_ARRAY('户外','徒步','周末'), '户外徒步', 240, 30, TRUE
