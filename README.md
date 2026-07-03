@@ -92,22 +92,22 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:3002/api/auth/activate/{act
 ```
 活动提交审核
   │
-  ├─ Layer 1: DFA 敏感词快速过滤（<1ms，完全本地）
-  │    ├─ DFA ≥ 8 分  → ⛔ "violation" ← 即时驳回，不消耗 API
-  │    ├─ DFA < 2 分  → ✅ "pass"      ← 即时放行，不消耗 API
-  │    └─ DFA 2~7 分  → 🤔 转入 Layer 2
+  ├─ 未配置 AI Key → uncertain → 转人工审核
+  │
+  ├─ Layer 1: DFA 敏感词快速过滤（<1ms，本地预审）
+  │    ├─ DFA ≥ 8 分  → violation ← 即时驳回
+  │    ├─ DFA < 2 分  → pass      ← 即时放行
+  │    └─ DFA 2~7 分  → 转入 Layer 2
   │
   └─ Layer 2: LLM 深度审核（SiliconFlow DeepSeek-V3.2）
        ├─ 成功 → 返回 LLM 判定结果（pass/violation/uncertain）
-       ├─ 失败（超时/网络异常）
-       │    └─ fallback → DFA ≥ 5 → "violation" / 否则 "uncertain"
-       └─ 超时 15 秒降级为人工审核（uncertain）
+       └─ 失败（超时/网络异常/解析失败）→ uncertain → 转人工审核
 ```
 
 - **DFA**：60+ 敏感词三级评分（HIGH 5分 / MEDIUM 3分 / LOW 1分），标题权重 2x
 - **LLM**：`temperature=0.1` + `response_format=json_object` 保证稳定结构化输出
-- **阈值**：DFA ≥ 8 直接驳回 / DFA < 2 直接放行 / 中间调 LLM
-- **配置**：`quju.ai.siliconflow.api-key` — 真实 API Key 已配置
+- **兜底**：AI Key 未配置或 LLM 调用失败时，活动进入 `pending_manual_review`
+- **配置**：通过环境变量 `SILICONFLOW_API_KEY` 提供真实 API Key，不写入仓库
 
 ### AI 活动策划
 

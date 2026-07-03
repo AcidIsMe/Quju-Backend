@@ -117,6 +117,18 @@ class ActivityIntegrationTest {
             assertEquals(1, created.getMaxParticipants());
         }
 
+        @Test @DisplayName("AI 服务未配置时提交创建应转人工审核")
+        void shouldFallbackToManualReviewWhenAiUnavailable() {
+            authenticateAs(userId, "personal");
+            ActivityCreateReq req = createValidReq();
+            req.setStatus("pending_ai_review");
+            ActivityEntity created = activityService.create(req, userId);
+            assertEquals("pending_manual_review", created.getStatus());
+            assertEquals("uncertain", created.getAiReviewResult());
+            assertEquals("AI 内容安全审核不确定，转人工审核", created.getReviewReason());
+            assertNotNull(created.getReviewedAt());
+        }
+
         @Test @DisplayName("创建活动时设置所有可选字段")
         void shouldCreateWithAllOptionalFields() {
             authenticateAs(userId, "personal");

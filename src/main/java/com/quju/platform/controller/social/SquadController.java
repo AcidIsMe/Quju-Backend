@@ -112,4 +112,25 @@ public class SquadController {
         squadService.addPoints(id, targetUserId, points);
         return ApiResponse.ok();
     }
+
+    @PostMapping("/{id}/transfer-leader")
+    public ApiResponse<Void> transferLeader(@PathVariable String id,
+                                            @RequestBody Map<String, String> body) {
+        squadService.transferLeader(id, SecurityUtil.requireCurrentUserId(), body.get("new_leader_id"));
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/blacklist")
+    public ApiResponse<Void> addToBlacklist(@PathVariable String id,
+                                            @RequestBody Map<String, String> body) {
+        squadService.addToBlacklist(id, SecurityUtil.requireCurrentUserId(), body.get("user_id"));
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/{id}/blacklist/{targetUserId}")
+    public ApiResponse<Void> removeFromBlacklist(@PathVariable String id,
+                                                  @PathVariable String targetUserId) {
+        squadService.removeFromBlacklist(id, SecurityUtil.requireCurrentUserId(), targetUserId);
+        return ApiResponse.ok();
+    }
 }

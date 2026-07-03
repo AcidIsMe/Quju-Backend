@@ -109,6 +109,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         List<ActivityEntity> items = activityMapper.searchMapBox(
                 req.getSwLat(), req.getSwLng(),
                 req.getNeLat(), req.getNeLng(),
+                req.getLat(), req.getLng(),
                 limit);
         return CursorPage.of(items, req.normalizedLimit(), e -> {
             LocalDateTime t = e.getStartTime();

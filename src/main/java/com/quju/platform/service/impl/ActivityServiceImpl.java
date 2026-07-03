@@ -273,6 +273,8 @@ public class ActivityServiceImpl implements ActivityService {
         String notifyContent;
         if ("pass".equals(result)) {
             newStatus = "published";
+            entity.setReviewReason("AI 内容安全审核通过");
+            entity.setReviewedAt(LocalDateTime.now());
             notifyTitle = "活动审核通过";
             notifyContent = "您的活动「" + entity.getTitle() + "」已通过 AI 内容安全审核并自动发布。";
         } else if ("violation".equals(result)) {
@@ -286,6 +288,8 @@ public class ActivityServiceImpl implements ActivityService {
             // uncertain — 保持当前状态，降级为人工审核
             // 转为 pending_manual_review 等待管理员处理
             newStatus = "pending_manual_review";
+            entity.setReviewReason("AI 内容安全审核不确定，转人工审核");
+            entity.setReviewedAt(LocalDateTime.now());
             notifyTitle = "活动已提交人工审核";
             notifyContent = "您的活动「" + entity.getTitle() + "」已提交，正在等待管理员审核。";
         }

@@ -12,8 +12,12 @@ import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
 import com.quju.platform.entity.FollowEntity;
 import com.quju.platform.entity.FriendshipEntity;
+import com.quju.platform.entity.TeamEntity;
+import com.quju.platform.entity.TeamMemberEntity;
 import com.quju.platform.mapper.FollowMapper;
 import com.quju.platform.mapper.FriendshipMapper;
+import com.quju.platform.mapper.TeamMapper;
+import com.quju.platform.mapper.TeamMemberMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.SocialGraphService;
 import com.quju.platform.util.SecurityUtil;
@@ -37,6 +41,8 @@ public class UserController {
     private final RegistrationMapper registrationMapper;
     private final FollowMapper followMapper;
     private final FriendshipMapper friendshipMapper;
+    private final TeamMapper teamMapper;
+    private final TeamMemberMapper teamMemberMapper;
     private final SocialGraphService socialGraphService;
 
     @GetMapping("/me")
@@ -277,6 +283,36 @@ public class UserController {
         }
 
         return ApiResponse.page(combined, paginationMap(page));
+    }
+
+    @GetMapping("/me/teams")
+    public ApiResponse<List<Map<String, Object>>> myTeams() {
+        String uid = SecurityUtil.requireCurrentUserId();
+        List<TeamMemberEntity> memberships = teamMemberMapper.selectList(
+                Wrappers.<TeamMemberEntity>lambdaQuery()
+                        .eq(TeamMemberEntity::getUserId, uid)
+                        .orderByDesc(TeamMemberEntity::getJoinedAt));
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (TeamMemberEntity m : memberships) {
+            TeamEntity team = teamMapper.selectById(m.getTeamId());
+            if (team == null || "dissolved".equals(team.getStatus())) {
+                continue;
+            }
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("id", team.getId());
+            item.put("name", team.getName());
+            item.put("description", team.getDescription());
+            item.put("interest_tags", team.getInterestTags());
+            item.put("join_type", team.getJoinType());
+            item.put("max_members", team.getMaxMembers());
+            item.put("current_members", team.getCurrentMembers());
+            item.put("avatar_url", team.getAvatarUrl());
+            item.put("status", team.getStatus());
+            item.put("my_role", m.getRole());
+            item.put("joined_at", m.getJoinedAt());
+            result.add(item);
+        }
+        return ApiResponse.ok(result);
     }
 
     private Map<String, Object> paginationMap(CursorPage<?> page) {

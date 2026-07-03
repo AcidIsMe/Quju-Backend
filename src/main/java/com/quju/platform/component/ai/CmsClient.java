@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  *   高分(≥8)直接驳回，低分(<2)直接放行，中间分转入 LLM
  *
  * Layer 2 — LLM 深度审核（调用 SiliconFlow DeepSeek-V3.2）
- *   语义理解判断，失败时回退到 DFA 评分决策
+ *   语义理解判断，未配置或失败时返回 uncertain，由上层转人工审核
  *
  * 判定策略：
  *   DFA ≥ 8          → "violation"（即时驳回）
@@ -51,11 +51,17 @@ public class CmsClient {
     // ========== 对外接口 ==========
 
     /**
-     * 双层内容安全审核
+     * 双层内容安全审核。
+     * 未配置 AI 服务时不允许本地规则自动发布，统一转人工审核。
      *
      * @return "pass" | "violation" | "uncertain"
      */
     public String reviewContent(String title, String description, List<String> tags) {
+        if (!llmClient.isConfigured()) {
+            log.warn("AI 服务未配置，活动内容审核转人工");
+            return "uncertain";
+        }
+
         String titleNorm = normalize(title);
         String descNorm = normalize(description);
 
@@ -100,10 +106,7 @@ public class CmsClient {
             log.error("LLM 审核异常，回退 DFA 决策", e);
         }
 
-        // LLM 失败时的 fallback：按 DFA 分数决策
-        if (dfaScore >= 5) return "violation";
-        if (dfaScore >= 2) return "uncertain";
-        return "pass";
+        return "uncertain";
     }
 
     // ========== DFA 扫描 ==========

@@ -36,8 +36,10 @@ def test_nearby():
 
 
 def test_map_view():
-    resp = get("/discover/nearby", params={"lat": "40.0", "lng": "116.3", "limit": "20"})
-    assert_pass("US17-2 地图点位", resp, 0)
+    resp = get("/discover/map", params={"swLat": "39.8", "swLng": "116.1",
+                                        "neLat": "40.2", "neLng": "116.7",
+                                        "limit": "20"})
+    assert_pass("US17-2 地图边界框查询", resp, 0)
 
 
 if __name__ == "__main__":

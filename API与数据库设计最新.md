@@ -1654,6 +1654,84 @@ images: [file1, file2, file3, ...]
 
 ---
 
+#### POST `/api/teams/:id/transfer-leader`
+
+转让队长（仅当前队长可操作）
+
+**Request:**
+
+```JSON
+{ "new_leader_id": "uuid" }
+```
+
+**校验规则：**
+- 仅队长可操作
+- 新队长必须是小队成员
+- 不能转让给自己
+
+**Response \(200\):**
+
+```JSON
+{ "code": 0, "message": "success" }
+```
+
+（原队长自动降级为管理员）
+
+---
+
+#### POST `/api/teams/:id/blacklist`
+
+将用户加入黑名单（队长/管理员操作）
+
+**Request:**
+
+```JSON
+{ "user_id": "uuid" }
+```
+
+**校验规则：**
+- 仅队长/管理员可操作
+- 不能将队长加入黑名单
+- 用户已在黑名单中 → 409
+- 拉黑时若该用户是成员则自动移出
+
+---
+
+#### DELETE `/api/teams/:id/blacklist/:userId`
+
+将用户移出黑名单（队长/管理员操作）
+
+---
+
+#### GET `/api/users/me/teams`
+
+获取当前用户加入的所有小队
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "周末徒步小队",
+      "description": "...",
+      "interest_tags": ["户外","徒步"],
+      "join_type": "review",
+      "max_members": 50,
+      "current_members": 32,
+      "avatar_url": "https://...",
+      "status": "active",
+      "my_role": "leader",
+      "joined_at": "2024-06-01T10:00:00"
+    }
+  ]
+}
+```
+
+---
+
 ### 2\.15 通知模块 \(Notifications\)
 
 #### GET `/api/notifications`

@@ -282,10 +282,14 @@ public class OpsAdminController {
     }
 
     @GetMapping("/teams")
-    public ApiResponse<List<Map<String, Object>>> teams(@RequestParam(required = false) String cursor,
+    public ApiResponse<List<Map<String, Object>>> teams(@RequestParam(required = false) String q,
+                                                       @RequestParam(required = false) String status,
+                                                       @RequestParam(required = false) String cursor,
                                                        @RequestParam(defaultValue = "20") Integer limit) {
         int size = normalizedLimit(limit);
-        var wrapper = Wrappers.<TeamEntity>lambdaQuery();
+        var wrapper = Wrappers.<TeamEntity>lambdaQuery()
+                .like(q != null && !q.isBlank(), TeamEntity::getName, q)
+                .eq(status != null, TeamEntity::getStatus, status);
         applyTeamCursor(wrapper, cursor);
         wrapper.orderByDesc(TeamEntity::getCreatedAt).orderByDesc(TeamEntity::getId);
         List<TeamEntity> rows = teamMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
@@ -302,11 +306,13 @@ public class OpsAdminController {
             item.put("status", team.getStatus());
             item.put("created_at", team.getCreatedAt());
             UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
-            item.put("leader", leader == null ? null : Map.of(
-                    "id", leader.getId(),
-                    "nickname", leader.getNickname(),
-                    "avatar_url", leader.getAvatarUrl()
-            ));
+            Map<String, Object> leaderInfo = new LinkedHashMap<>();
+            if (leader != null) {
+                leaderInfo.put("id", leader.getId());
+                leaderInfo.put("nickname", leader.getNickname());
+                leaderInfo.put("avatar_url", leader.getAvatarUrl());
+            }
+            item.put("leader", leader == null ? null : leaderInfo);
             long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
                     .eq(ActivityEntity::getTeamId, team.getId())
                     .eq(ActivityEntity::getTeamActivity, true));
@@ -336,12 +342,14 @@ public class OpsAdminController {
         result.put("updated_at", team.getUpdatedAt());
         // 队长信息
         UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
-        result.put("leader", leader == null ? null : Map.of(
-                "id", leader.getId(),
-                "nickname", leader.getNickname(),
-                "avatar_url", leader.getAvatarUrl(),
-                "email", leader.getEmail()
-        ));
+        Map<String, Object> leaderInfo = new LinkedHashMap<>();
+        if (leader != null) {
+            leaderInfo.put("id", leader.getId());
+            leaderInfo.put("nickname", leader.getNickname());
+            leaderInfo.put("avatar_url", leader.getAvatarUrl());
+            leaderInfo.put("email", leader.getEmail());
+        }
+        result.put("leader", leader == null ? null : leaderInfo);
         // 活动数统计
         long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
                 .eq(ActivityEntity::getTeamId, id)

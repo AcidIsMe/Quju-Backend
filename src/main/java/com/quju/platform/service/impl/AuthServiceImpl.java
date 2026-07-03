@@ -17,6 +17,7 @@ import com.quju.platform.mapper.MerchantProfileMapper;
 import com.quju.platform.mapper.RefreshTokenMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.AuthService;
+import com.quju.platform.service.EmailService;
 import com.quju.platform.util.JwtTokenUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,12 +41,14 @@ public class AuthServiceImpl implements AuthService {
     private final LoginAttemptMapper loginAttemptMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenUtil jwtTokenUtil;
+    private final EmailService emailService;
 
     @Override
     @Transactional
     public Map<String, Object> registerPersonal(RegisterReq req) {
         UserEntity user = createUser(req.getEmail(), req.getPassword(), req.getNickname(), "personal");
         String token = createActivationToken(user.getId());
+        emailService.sendActivationEmail(user.getEmail(), token);
         return Map.of("email", user.getEmail(), "activation_token", token);
     }
 
@@ -62,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
         profile.setAuditStatus("pending");
         merchantProfileMapper.insert(profile);
         String token = createActivationToken(user.getId());
+        emailService.sendActivationEmail(user.getEmail(), token);
         return Map.of("email", user.getEmail(), "audit_status", "pending", "activation_token", token);
     }
 
@@ -157,6 +161,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
     public void resendActivation(String email) {
         UserEntity user = userMapper.selectOne(Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getEmail, email));
         if (user != null && "pending_activation".equals(user.getStatus())) {
@@ -168,7 +173,8 @@ public class AuthServiceImpl implements AuthService {
                         t.setUsedAt(LocalDateTime.now());
                         activationTokenMapper.updateById(t);
                     });
-            createActivationToken(user.getId());
+            String token = createActivationToken(user.getId());
+            emailService.sendActivationEmail(user.getEmail(), token);
         }
     }
 
