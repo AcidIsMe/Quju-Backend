@@ -306,11 +306,13 @@ public class OpsAdminController {
             item.put("status", team.getStatus());
             item.put("created_at", team.getCreatedAt());
             UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
-            item.put("leader", leader == null ? null : Map.of(
-                    "id", leader.getId(),
-                    "nickname", leader.getNickname(),
-                    "avatar_url", leader.getAvatarUrl()
-            ));
+            Map<String, Object> leaderInfo = new LinkedHashMap<>();
+            if (leader != null) {
+                leaderInfo.put("id", leader.getId());
+                leaderInfo.put("nickname", leader.getNickname());
+                leaderInfo.put("avatar_url", leader.getAvatarUrl());
+            }
+            item.put("leader", leader == null ? null : leaderInfo);
             long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
                     .eq(ActivityEntity::getTeamId, team.getId())
                     .eq(ActivityEntity::getTeamActivity, true));
@@ -340,12 +342,14 @@ public class OpsAdminController {
         result.put("updated_at", team.getUpdatedAt());
         // 队长信息
         UserEntity leader = team.getLeaderId() == null ? null : userMapper.selectById(team.getLeaderId());
-        result.put("leader", leader == null ? null : Map.of(
-                "id", leader.getId(),
-                "nickname", leader.getNickname(),
-                "avatar_url", leader.getAvatarUrl(),
-                "email", leader.getEmail()
-        ));
+        Map<String, Object> leaderInfo = new LinkedHashMap<>();
+        if (leader != null) {
+            leaderInfo.put("id", leader.getId());
+            leaderInfo.put("nickname", leader.getNickname());
+            leaderInfo.put("avatar_url", leader.getAvatarUrl());
+            leaderInfo.put("email", leader.getEmail());
+        }
+        result.put("leader", leader == null ? null : leaderInfo);
         // 活动数统计
         long activityCount = activityMapper.selectCount(Wrappers.<ActivityEntity>lambdaQuery()
                 .eq(ActivityEntity::getTeamId, id)

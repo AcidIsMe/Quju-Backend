@@ -473,7 +473,7 @@ def test_transfer_leader():
     old = next((m for m in members if m.get("userId") == user_a["id"]), None)
     if old:
         assert old.get("role") == "admin", f"原队长应降级, 实际: {old.get('role')}"
-        print(f"  [验证] 原队长 role={old.get('role')} ✓")
+        print(f"  [verify] old leader role={old.get('role')}")
 
     # 原队长(A)再尝试转让
     _post(f"/teams/{team['id']}/transfer-leader",
