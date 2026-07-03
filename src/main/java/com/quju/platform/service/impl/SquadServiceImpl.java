@@ -102,6 +102,17 @@ public class SquadServiceImpl implements SquadService {
             throw new BusinessException(40301, "您已被加入小队黑名单");
         }
 
+        // 检查是否已有待处理的入队申请
+        if ("review".equals(team.getJoinType())) {
+            Long pendingCount = teamJoinRequestMapper.selectCount(Wrappers.<TeamJoinRequestEntity>lambdaQuery()
+                    .eq(TeamJoinRequestEntity::getTeamId, id)
+                    .eq(TeamJoinRequestEntity::getUserId, userId)
+                    .eq(TeamJoinRequestEntity::getStatus, "pending"));
+            if (pendingCount > 0) {
+                throw new BusinessException(40903, "您已提交过入队申请，请等待审核");
+            }
+        }
+
         if ("review".equals(team.getJoinType())) {
             TeamJoinRequestEntity request = new TeamJoinRequestEntity();
             request.setTeamId(id);
