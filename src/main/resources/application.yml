@@ -16,6 +16,17 @@ spring:
     url: jdbc:mysql://localhost:3306/quju_platform?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:Wangqiang0915}
+  mail:
+    host: ${SMTP_HOST:smtp.qq.com}
+    port: ${SMTP_PORT:465}
+    username: ${SMTP_USERNAME:544770667@qq.com}
+    password: efwhrbvctwmxbdjd
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
   sql:
     init:
       mode: always
@@ -43,6 +54,11 @@ quju:
     refresh-token-ttl-seconds: 604800
   files:
     upload-dir: uploads
+  mail:
+    enabled: ${MAIL_ENABLED:true}
+    from: ${MAIL_FROM:${SMTP_USERNAME:544770667@qq.com}}
+    from-name: ${MAIL_FROM_NAME:趣聚平台}
+    activation-base-url: ${PUBLIC_BACKEND_BASE_URL:http://localhost:3002/api}
   ai:
     siliconflow:
       api-key: ${SILICONFLOW_API_KEY:sk-kkcdcrgrcefalxqbhzovakhuqcvgymdnayfooazpsyyyrlti}
