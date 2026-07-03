@@ -20,6 +20,7 @@ public interface ActivityMapper extends BaseMapper<ActivityEntity> {
     List<ActivityEntity> searchWithRelevance(@Param("q") String q,
                                              @Param("city") String city,
                                              @Param("feeType") String feeType,
+                                             @Param("activityTypes") String activityTypes,
                                              @Param("startAfter") String startAfter,
                                              @Param("startBefore") String startBefore,
                                              @Param("limit") Integer limit);

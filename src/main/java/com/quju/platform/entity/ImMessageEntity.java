@@ -25,4 +25,5 @@ public class ImMessageEntity {
     private Boolean recalled;
     private LocalDateTime createdAt;
     private LocalDateTime recalledAt;
+    private LocalDateTime readAt;
 }

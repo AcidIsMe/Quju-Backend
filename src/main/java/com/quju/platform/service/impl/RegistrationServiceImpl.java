@@ -12,6 +12,7 @@ import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.mapper.WaitlistMapper;
 import com.quju.platform.service.NotificationService;
 import com.quju.platform.service.RegistrationService;
+import com.quju.platform.service.SquadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final RegistrationMapper registrationMapper;
     private final WaitlistMapper waitlistMapper;
     private final NotificationService notificationService;
+    private final SquadService squadService;
 
     @Override
     @Transactional
@@ -89,6 +91,16 @@ public class RegistrationServiceImpl implements RegistrationService {
         }
         activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
         activityMapper.updateById(activity);
+
+        // US35: 参与小队活动自动增加积分
+        if (Boolean.TRUE.equals(activity.getTeamActivity()) && activity.getTeamId() != null) {
+            try {
+                squadService.addPoints(activity.getTeamId(), userId, 10);
+            } catch (Exception ignored) {
+                // 非小队成员不增加积分
+            }
+        }
+
         return Map.of("registration_id", registration.getId(), "status", registration.getStatus(), "current_participants", activity.getCurrentParticipants());
     }
 
@@ -136,6 +148,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                     // 标记候补为已递补
                     waitlistEntry.setStatus("promoted");
                     waitlistEntry.setNotifiedAt(LocalDateTime.now());
+                    waitlistEntry.setExpiresAt(LocalDateTime.now().plusMinutes(30)); // 30分钟确认超时
                     waitlistMapper.updateById(waitlistEntry);
 
                     // 递增参与人数
@@ -147,7 +160,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                             waitlistEntry.getUserId(),
                             "waitlist_promoted",
                             "候补成功",
-                            "您已从候补队列递补为正式报名者，请在活动页面查看详情。",
+                            "您已从候补队列递补为正式报名者，请在30分钟内确认，否则资格将顺延下一位。",
                             Map.of("activity_id", activityId, "activity_title", activity.getTitle())
                     );
                 });

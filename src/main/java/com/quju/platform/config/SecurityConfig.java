@@ -51,6 +51,7 @@ public class SecurityConfig {
                         .requestMatchers("/files/upload").permitAll()
                         .requestMatchers("/users/check-nickname").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers("/ws/im").permitAll()
                         .requestMatchers(HttpMethod.GET, "/activities/*").permitAll()
                         .requestMatchers("/admin/**").hasRole("admin")
                         .anyRequest().authenticated())

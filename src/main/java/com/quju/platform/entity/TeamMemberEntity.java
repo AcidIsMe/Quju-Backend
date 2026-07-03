@@ -15,5 +15,6 @@ public class TeamMemberEntity {
     private String teamId;
     private String userId;
     private String role;
+    private Integer points;
     private LocalDateTime joinedAt;
 }

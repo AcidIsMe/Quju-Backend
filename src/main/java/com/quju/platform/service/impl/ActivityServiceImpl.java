@@ -6,10 +6,13 @@ import com.quju.platform.component.statemachine.ActivityStateMachine;
 import com.quju.platform.dto.activity.ActivityCreateReq;
 import com.quju.platform.entity.ActivityEntity;
 import com.quju.platform.entity.RegistrationEntity;
+import com.quju.platform.entity.TeamMemberEntity;
 import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
+import com.quju.platform.mapper.TeamMapper;
+import com.quju.platform.mapper.TeamMemberMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.ActivityService;
 import com.quju.platform.service.NotificationService;
@@ -36,9 +39,23 @@ public class ActivityServiceImpl implements ActivityService {
     private final ActivityStateMachine stateMachine;
     private final CmsClient cmsClient;
     private final NotificationService notificationService;
+    private final TeamMapper teamMapper;
+    private final TeamMemberMapper teamMemberMapper;
 
     @Override
     public ActivityEntity create(ActivityCreateReq req, String creatorId) {
+        // US33: 队内活动校验——小队存在性 + 队长/管理员权限
+        if (Boolean.TRUE.equals(req.getTeamActivity()) && req.getTeamId() != null) {
+            if (teamMapper.selectById(req.getTeamId()) == null) {
+                throw new BusinessException(40404, "小队不存在");
+            }
+            TeamMemberEntity member = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
+                    .eq(TeamMemberEntity::getTeamId, req.getTeamId())
+                    .eq(TeamMemberEntity::getUserId, creatorId));
+            if (member == null || (!"leader".equals(member.getRole()) && !"admin".equals(member.getRole()))) {
+                throw new BusinessException(40300, "仅小队长或管理员可发布队内活动");
+            }
+        }
         ActivityEntity entity = new ActivityEntity();
         fill(entity, req);
         entity.setCreatorId(creatorId);
@@ -256,6 +273,8 @@ public class ActivityServiceImpl implements ActivityService {
         String notifyContent;
         if ("pass".equals(result)) {
             newStatus = "published";
+            entity.setReviewReason("AI 内容安全审核通过");
+            entity.setReviewedAt(LocalDateTime.now());
             notifyTitle = "活动审核通过";
             notifyContent = "您的活动「" + entity.getTitle() + "」已通过 AI 内容安全审核并自动发布。";
         } else if ("violation".equals(result)) {
@@ -269,6 +288,8 @@ public class ActivityServiceImpl implements ActivityService {
             // uncertain — 保持当前状态，降级为人工审核
             // 转为 pending_manual_review 等待管理员处理
             newStatus = "pending_manual_review";
+            entity.setReviewReason("AI 内容安全审核不确定，转人工审核");
+            entity.setReviewedAt(LocalDateTime.now());
             notifyTitle = "活动已提交人工审核";
             notifyContent = "您的活动「" + entity.getTitle() + "」已提交，正在等待管理员审核。";
         }

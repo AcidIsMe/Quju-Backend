@@ -69,6 +69,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 req.getQ(),
                 req.getCity(),
                 req.getFeeType(),
+                req.getActivityTypes(),
                 req.effectiveStartFrom() != null ? req.effectiveStartFrom().toString() : null,
                 req.effectiveStartTo() != null ? req.effectiveStartTo().toString() : null,
                 fetchLimit);

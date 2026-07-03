@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     team_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     role VARCHAR(10) NOT NULL DEFAULT 'member',
+    points INT NOT NULL DEFAULT 0,
     joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (team_id, user_id)
 );
@@ -244,15 +245,18 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS im_messages (
     id VARCHAR(36) PRIMARY KEY,
     entity_type VARCHAR(30) NOT NULL,
-    entity_id VARCHAR(36) NOT NULL,
+    entity_id VARCHAR(100) NOT NULL,
     sender_id VARCHAR(36) NOT NULL,
     type VARCHAR(20) NOT NULL DEFAULT 'text',
     content TEXT,
     metadata TEXT,
     recalled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    recalled_at TIMESTAMP
+    recalled_at TIMESTAMP,
+    read_at TIMESTAMP
 );
+
+ALTER TABLE IF EXISTS im_messages ALTER COLUMN entity_id VARCHAR(100) NOT NULL;
 
 -- 插入系统活动模板
 MERGE INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system) KEY(id)

@@ -3,6 +3,7 @@ package com.quju.platform.component.websocket;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,5 +22,9 @@ public class SessionManager {
 
     public void remove(String userId) {
         sessions.remove(userId);
+    }
+
+    public Map<String, WebSocketSession> getAll() {
+        return Collections.unmodifiableMap(sessions);
     }
 }

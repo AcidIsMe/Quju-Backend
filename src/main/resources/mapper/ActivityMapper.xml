@@ -31,14 +31,14 @@
         SELECT *,
                CASE
                    WHEN title LIKE CONCAT('%', #{q}, '%') THEN 3
-                   WHEN tags LIKE CONCAT('%', #{q}, '%') THEN 2
+                   WHEN JSON_CONTAINS(tags, CONCAT('"', #{q}, '"')) THEN 2
                    WHEN description LIKE CONCAT('%', #{q}, '%') THEN 1
                    ELSE 0
                END AS relevance_score
         FROM activities
         WHERE status = 'published'
           AND (title LIKE CONCAT('%', #{q}, '%')
-               OR tags LIKE CONCAT('%', #{q}, '%')
+               OR JSON_CONTAINS(tags, CONCAT('"', #{q}, '"'))
                OR description LIKE CONCAT('%', #{q}, '%'))
         <if test="city != null and city != ''">
           AND city = #{city}
@@ -51,6 +51,12 @@
         </if>
         <if test="startBefore != null and startBefore != ''">
           AND start_time &lt;= #{startBefore}
+        </if>
+        <if test="activityTypes != null and activityTypes != ''">
+          AND activity_type IN
+          <foreach item="type" collection="activityTypes.split(',')" open="(" separator="," close=")">
+              #{type}
+          </foreach>
         </if>
         ORDER BY relevance_score DESC, created_at DESC, id DESC
         LIMIT #{limit}
