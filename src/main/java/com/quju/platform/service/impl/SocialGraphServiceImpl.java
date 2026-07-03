@@ -69,6 +69,16 @@ public class SocialGraphServiceImpl implements SocialGraphService {
             throw new BusinessException(40003, "已发送过好友请求，请等待对方处理");
         }
 
+        // 检查对方是否已向我发送 pending 请求 → 自动接受并建立好友关系
+        FriendshipEntity reversePending = friendshipMapper.selectOne(Wrappers.<FriendshipEntity>lambdaQuery()
+                .eq(FriendshipEntity::getUserId, targetUserId)
+                .eq(FriendshipEntity::getFriendId, userId)
+                .eq(FriendshipEntity::getStatus, "pending"));
+        if (reversePending != null) {
+            accept(reversePending.getId(), userId);
+            return Map.of("request_id", reversePending.getId(), "status", "accepted", "auto_upgraded", true);
+        }
+
         FriendshipEntity friendship = new FriendshipEntity();
         friendship.setUserId(userId);
         friendship.setFriendId(targetUserId);
@@ -388,5 +398,98 @@ public class SocialGraphServiceImpl implements SocialGraphService {
                     map.put("avatar_url", user != null && user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
                     return map;
                 }).toList();
+    }
+
+    @Override
+    public Map<String, Object> addByQrcode(String userId, String ownerUserId) {
+        if (userId.equals(ownerUserId)) {
+            throw new BusinessException(40003, "不能添加自己为好友");
+        }
+
+        // 检查目标用户是否存在
+        UserEntity targetUser = userMapper.selectById(ownerUserId);
+        if (targetUser == null) {
+            throw new BusinessException(40400, "用户不存在");
+        }
+
+        // 检查是否已经是好友
+        long acceptedCount = friendshipMapper.selectCount(Wrappers.<FriendshipEntity>lambdaQuery()
+                .and(w -> w.eq(FriendshipEntity::getUserId, userId)
+                        .eq(FriendshipEntity::getFriendId, ownerUserId)
+                        .or()
+                        .eq(FriendshipEntity::getUserId, ownerUserId)
+                        .eq(FriendshipEntity::getFriendId, userId))
+                .eq(FriendshipEntity::getStatus, "accepted"));
+        if (acceptedCount > 0) {
+            return Map.of("already_friend", true);
+        }
+
+        // 检查是否被对方拉黑
+        long blockedCount = friendshipMapper.selectCount(Wrappers.<FriendshipEntity>lambdaQuery()
+                .eq(FriendshipEntity::getUserId, ownerUserId)
+                .eq(FriendshipEntity::getFriendId, userId)
+                .eq(FriendshipEntity::getStatus, "blocked"));
+        if (blockedCount > 0) {
+            throw new BusinessException(40002, "无法添加好友，你已被对方拉黑");
+        }
+
+        // 检查对方是否已向我发送 pending → 自动接受
+        FriendshipEntity reversePending = friendshipMapper.selectOne(Wrappers.<FriendshipEntity>lambdaQuery()
+                .eq(FriendshipEntity::getUserId, ownerUserId)
+                .eq(FriendshipEntity::getFriendId, userId)
+                .eq(FriendshipEntity::getStatus, "pending"));
+        if (reversePending != null) {
+            accept(reversePending.getId(), userId);
+            return Map.of("already_friend", false, "auto_accepted", true);
+        }
+
+        // 检查我是否已向对方发送 pending → 直接升级为好友
+        FriendshipEntity myPending = friendshipMapper.selectOne(Wrappers.<FriendshipEntity>lambdaQuery()
+                .eq(FriendshipEntity::getUserId, userId)
+                .eq(FriendshipEntity::getFriendId, ownerUserId)
+                .eq(FriendshipEntity::getStatus, "pending"));
+        if (myPending != null) {
+            myPending.setStatus("accepted");
+            friendshipMapper.updateById(myPending);
+            // 创建逆向关系
+            FriendshipEntity reverse = new FriendshipEntity();
+            reverse.setUserId(ownerUserId);
+            reverse.setFriendId(userId);
+            reverse.setStatus("accepted");
+            reverse.setActionUserId(userId);
+            reverse.setGroupTags(List.of());
+            friendshipMapper.insert(reverse);
+        } else {
+            // 直接建立双向好友关系
+            FriendshipEntity f1 = new FriendshipEntity();
+            f1.setUserId(userId);
+            f1.setFriendId(ownerUserId);
+            f1.setStatus("accepted");
+            f1.setActionUserId(userId);
+            f1.setGroupTags(List.of());
+            friendshipMapper.insert(f1);
+
+            FriendshipEntity f2 = new FriendshipEntity();
+            f2.setUserId(ownerUserId);
+            f2.setFriendId(userId);
+            f2.setStatus("accepted");
+            f2.setActionUserId(userId);
+            f2.setGroupTags(List.of());
+            friendshipMapper.insert(f2);
+        }
+
+        // 发送通知给双方
+        UserEntity currentUser = userMapper.selectById(userId);
+        String currentNickname = currentUser != null ? currentUser.getNickname() : "未知用户";
+        String targetNickname = targetUser.getNickname() != null ? targetUser.getNickname() : "未知用户";
+
+        notificationService.notify(userId, "friend_added", "好友添加",
+                "你和 " + targetNickname + " 通过扫码成为好友",
+                Map.of("friend_id", ownerUserId, "friend_nickname", targetNickname));
+        notificationService.notify(ownerUserId, "friend_added", "好友添加",
+                currentNickname + " 通过扫码添加你为好友",
+                Map.of("friend_id", userId, "friend_nickname", currentNickname));
+
+        return Map.of("already_friend", false);
     }
 }
