@@ -25,10 +25,12 @@ public interface ActivityMapper extends BaseMapper<ActivityEntity> {
                                              @Param("startBefore") String startBefore,
                                              @Param("limit") Integer limit);
 
-    /** 地图边界框查询 + 轻量数据 */
+    /** 地图边界框查询 + 轻量数据，含可选距离计算 */
     List<ActivityEntity> searchMapBox(@Param("swLat") BigDecimal swLat,
                                       @Param("swLng") BigDecimal swLng,
                                       @Param("neLat") BigDecimal neLat,
                                       @Param("neLng") BigDecimal neLng,
+                                      @Param("lat") BigDecimal lat,
+                                      @Param("lng") BigDecimal lng,
                                       @Param("limit") Integer limit);
 }
