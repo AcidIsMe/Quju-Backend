@@ -1796,7 +1796,280 @@ type: avatar | activity_cover | activity_image | license | team_avatar | team_al
 
 ---
 
-### 2\.18 API 汇总表
+### 2\.18 即时通讯模块 \(IM\)
+
+> 好友在线聊天功能。私聊基于好友关系，仅互为好友的用户才能发送消息。
+> 
+> 
+
+#### WebSocket `/ws/im?token={jwt_token}`
+
+建立实时消息连接。
+
+**认证方式：** URL 参数 `token` 传入 JWT access\_token 进行鉴权。
+
+**支持的消息类型：**
+
+| 类型 | 方向 | 说明 |
+|------|------|------|
+| `send_message` | 客户端 → 服务端 | 发送聊天消息 |
+| `new_message` | 服务端 → 客户端 | 新消息推送 |
+| `typing` | 双向 | 输入状态提示 |
+| `mark_read` | 客户端 → 服务端 | 标记会话已读 |
+| `read_ack` | 服务端 → 客户端 | 已读确认回执 |
+| `ping` | 客户端 → 服务端 | 心跳 |
+| `pong` | 服务端 → 客户端 | 心跳回复 |
+| `error` | 服务端 → 客户端 | 错误消息 |
+
+**send\_message 请求格式：**
+
+```JSON
+{
+  "type": "send_message",
+  "entity_type": "private",
+  "entity_id": "userAId:userBId",
+  "content": "你好！",
+  "msg_type": "text"
+}
+```
+
+**new\_message 推送格式：**
+
+```JSON
+{
+  "type": "new_message",
+  "message_id": "uuid",
+  "entity_type": "private",
+  "entity_id": "userAId:userBId",
+  "sender_id": "uuid",
+  "content": "你好！",
+  "created_at": "2024-06-15T10:00:00"
+}
+```
+
+**typing 格式：**
+
+```JSON
+{
+  "type": "typing",
+  "entity_type": "private",
+  "entity_id": "userAId:userBId",
+  "user_id": "uuid"
+}
+```
+
+**mark\_read 格式：**
+
+```JSON
+{
+  "type": "mark_read",
+  "entity_type": "private",
+  "entity_id": "userAId:userBId"
+}
+```
+
+---
+
+#### POST `/api/im/messages`
+
+发送消息（REST 方式，与 WebSocket 二选一）
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Request:**
+
+```JSON
+{
+  "entity_type": "private",
+  "entity_id": "userAId:userBId",
+  "type": "text",
+  "content": "你好！",
+  "mention_all": false,
+  "mention_user_ids": [],
+  "metadata": {}
+}
+```
+
+**校验规则：**
+
+- `entity_type = "private"` 时，自动校验当前用户与对方是否为好友关系
+- `entity_id` 格式为两个 userId 按字母序拼接，以 `:` 分隔
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": {
+    "id": "uuid",
+    "entity_type": "private",
+    "entity_id": "userAId:userBId",
+    "sender_id": "uuid",
+    "type": "text",
+    "content": "你好！",
+    "recalled": false,
+    "created_at": "2024-06-15T10:00:00"
+  }
+}
+```
+
+**错误码：** 40300=不是好友关系，无法发送消息, 40000=私聊entity_id格式错误
+
+---
+
+#### POST `/api/im/messages/{id}/recall`
+
+撤回消息
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**约束：** 仅消息发送者可撤回，且发送时间不超过 2 分钟
+
+**Response \(200\):**
+
+```JSON
+{ "code": 0, "message": "success" }
+```
+
+**错误码：** 40405=消息不存在, 40300=只能撤回自己的消息, 40920=消息已超过可撤回时间（2分钟）, 40920=消息已被撤回
+
+---
+
+#### GET `/api/im/messages`
+
+获取消息历史（游标分页，按时间倒序）
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Query:**
+
+```Plain Text
+?entity_type=private
+&entity_id=userAId:userBId
+&cursor=2024-06-15T10:00:00
+&limit=20
+```
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "entity_type": "private",
+        "entity_id": "userAId:userBId",
+        "sender_id": "uuid",
+        "type": "text",
+        "content": "你好！",
+        "recalled": false,
+        "read_at": "2024-06-15T10:01:00",
+        "created_at": "2024-06-15T10:00:00"
+      }
+    ],
+    "nextCursor": "2024-06-15T09:59:00",
+    "hasMore": true,
+    "limit": 20
+  }
+}
+```
+
+---
+
+#### GET `/api/im/conversations`
+
+获取会话列表（按最后消息时间倒序）
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": [
+    {
+      "entity_type": "private",
+      "entity_id": "userAId:userBId",
+      "other_user_id": "uuid",
+      "other_nickname": "张三",
+      "other_avatar_url": "https://...",
+      "last_message": "你好！",
+      "last_message_type": "text",
+      "last_message_time": "2024-06-15T10:00:00",
+      "last_sender_id": "uuid",
+      "last_message_recalled": false,
+      "unread_count": 3
+    }
+  ]
+}
+```
+
+---
+
+#### POST `/api/im/messages/read`
+
+标记会话已读
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Query:**
+
+```Plain Text
+?entity_type=private&entity_id=userAId:userBId
+```
+
+**Response \(200\):**
+
+```JSON
+{ "code": 0, "message": "success" }
+```
+
+---
+
+#### GET `/api/im/messages/unread-count`
+
+获取指定会话的未读消息数
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Query:**
+
+```Plain Text
+?entity_type=private&entity_id=userAId:userBId
+```
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": { "count": 3 }
+}
+```
+
+---
+
+#### GET `/api/im/messages/total-unread`
+
+获取所有会话的总未读消息数
+
+**Header:** Authorization: Bearer `<access_token>`
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": { "count": 10 }
+}
+```
+
+---
+
+### 2\.19 API 汇总表
 
 > ✓ = 需 JWT, † = 需 admin 角色
 > 

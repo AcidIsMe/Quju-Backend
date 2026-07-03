@@ -285,6 +285,7 @@ CREATE TABLE IF NOT EXISTS im_messages (
     recalled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     recalled_at DATETIME(3),
+    read_at DATETIME(3),
     INDEX idx_im_messages_entity_created (entity_type, entity_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

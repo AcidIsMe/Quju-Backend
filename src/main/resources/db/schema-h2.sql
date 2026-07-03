@@ -251,7 +251,8 @@ CREATE TABLE IF NOT EXISTS im_messages (
     metadata TEXT,
     recalled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    recalled_at TIMESTAMP
+    recalled_at TIMESTAMP,
+    read_at TIMESTAMP
 );
 
 -- 插入系统活动模板
