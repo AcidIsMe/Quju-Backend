@@ -1,5 +1,6 @@
 package com.quju.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.entity.MerchantProfileEntity;
 import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -78,6 +82,56 @@ public class MerchantServiceImpl implements MerchantService {
                     Map.of("merchant_id", merchantId, "reason", reason)
             );
         }
+    }
+
+    @Override
+    public Map<String, Object> listApproved(String keyword, String domain, int page, int size) {
+        int pageSize = Math.max(1, Math.min(size, 100));
+        int offset = (Math.max(1, page) - 1) * pageSize;
+
+        var wrapper = Wrappers.<MerchantProfileEntity>lambdaQuery()
+                .eq(MerchantProfileEntity::getAuditStatus, "approved")
+                .and(keyword != null && !keyword.isBlank(), w -> w
+                        .like(MerchantProfileEntity::getMerchantName, keyword)
+                        .or()
+                        .like(MerchantProfileEntity::getMerchantNickname, keyword));
+        if (domain != null && !domain.isBlank()) {
+            wrapper.apply("activity_domains LIKE {0}", "%" + domain + "%");
+        }
+
+        long total = merchantProfileMapper.selectCount(wrapper);
+        wrapper.orderByDesc(MerchantProfileEntity::getCreatedAt).orderByDesc(MerchantProfileEntity::getId);
+        wrapper.last("LIMIT " + offset + "," + pageSize);
+
+        List<Map<String, Object>> list = merchantProfileMapper.selectList(wrapper).stream()
+                .map(this::toListItem)
+                .toList();
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("total", total);
+        pagination.put("page", page);
+        pagination.put("size", pageSize);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("data", list);
+        result.put("pagination", pagination);
+        return result;
+    }
+
+    private Map<String, Object> toListItem(MerchantProfileEntity merchant) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", merchant.getId());
+        item.put("merchant_name", merchant.getMerchantName());
+        item.put("merchant_nickname", merchant.getMerchantNickname());
+        item.put("activity_domains", merchant.getActivityDomains());
+        item.put("created_at", merchant.getCreatedAt());
+        if (merchant.getUserId() != null) {
+            UserEntity user = userMapper.selectById(merchant.getUserId());
+            if (user != null) {
+                item.put("avatar_url", user.getAvatarUrl() == null ? "" : user.getAvatarUrl());
+            }
+        }
+        return item;
     }
 
     private MerchantProfileEntity require(String merchantId) {
