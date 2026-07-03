@@ -11,6 +11,7 @@ public class QujuProperties {
 
     private Jwt jwt = new Jwt();
     private FileStorage files = new FileStorage();
+    private Mail mail = new Mail();
     private Ai ai = new Ai();
 
     @Data
@@ -23,6 +24,14 @@ public class QujuProperties {
     @Data
     public static class FileStorage {
         private String uploadDir = "uploads";
+    }
+
+    @Data
+    public static class Mail {
+        private boolean enabled = true;
+        private String from;
+        private String fromName = "趣聚平台";
+        private String activationBaseUrl = "http://localhost:3002/api";
     }
 
     @Data

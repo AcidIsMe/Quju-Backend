@@ -63,7 +63,7 @@
     </select>
 
     <select id="searchMapBox" resultType="com.quju.platform.entity.ActivityEntity">
-        SELECT id, title, location_lat, location_lng, start_time,
+        SELECT id, title, location_name, location_lat, location_lng, start_time,
                current_participants, max_participants, activity_type, city
         FROM activities
         WHERE status = 'published'
