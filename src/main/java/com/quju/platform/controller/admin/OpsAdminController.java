@@ -282,10 +282,14 @@ public class OpsAdminController {
     }
 
     @GetMapping("/teams")
-    public ApiResponse<List<Map<String, Object>>> teams(@RequestParam(required = false) String cursor,
+    public ApiResponse<List<Map<String, Object>>> teams(@RequestParam(required = false) String q,
+                                                       @RequestParam(required = false) String status,
+                                                       @RequestParam(required = false) String cursor,
                                                        @RequestParam(defaultValue = "20") Integer limit) {
         int size = normalizedLimit(limit);
-        var wrapper = Wrappers.<TeamEntity>lambdaQuery();
+        var wrapper = Wrappers.<TeamEntity>lambdaQuery()
+                .like(q != null && !q.isBlank(), TeamEntity::getName, q)
+                .eq(status != null, TeamEntity::getStatus, status);
         applyTeamCursor(wrapper, cursor);
         wrapper.orderByDesc(TeamEntity::getCreatedAt).orderByDesc(TeamEntity::getId);
         List<TeamEntity> rows = teamMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
