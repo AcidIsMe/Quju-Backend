@@ -3,8 +3,17 @@ quju:
     secret: "dGVzdC1zZWNyZXQta2V5LWZvci1xdWp1LXBsYXRmb3JtLW1pbmltdW0tMzItYnl0ZXM="
     access-token-ttl-seconds: 7200
     refresh-token-ttl-seconds: 259200
+  mail:
+    enabled: false
+    from: test@example.com
+    activation-base-url: http://localhost:3002/api
 
 spring:
+  mail:
+    host: localhost
+    port: 2525
+    username: test@example.com
+    password:
   datasource:
     url: jdbc:h2:mem:quju_test;MODE=MySQL;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver

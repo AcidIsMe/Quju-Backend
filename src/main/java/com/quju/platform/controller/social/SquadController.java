@@ -33,8 +33,8 @@ public class SquadController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<TeamEntity> detail(@PathVariable String id) {
-        return ApiResponse.ok(squadService.detail(id));
+    public ApiResponse<Map<String, Object>> detail(@PathVariable String id) {
+        return ApiResponse.ok(squadService.detailWithMembers(id));
     }
 
     @PostMapping("/{id}/join")
@@ -110,6 +110,27 @@ public class SquadController {
         String targetUserId = (String) body.get("user_id");
         int points = body.get("points") instanceof Integer ? (Integer) body.get("points") : 0;
         squadService.addPoints(id, targetUserId, points);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/transfer-leader")
+    public ApiResponse<Void> transferLeader(@PathVariable String id,
+                                            @RequestBody Map<String, String> body) {
+        squadService.transferLeader(id, SecurityUtil.requireCurrentUserId(), body.get("new_leader_id"));
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/blacklist")
+    public ApiResponse<Void> addToBlacklist(@PathVariable String id,
+                                            @RequestBody Map<String, String> body) {
+        squadService.addToBlacklist(id, SecurityUtil.requireCurrentUserId(), body.get("user_id"));
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/{id}/blacklist/{targetUserId}")
+    public ApiResponse<Void> removeFromBlacklist(@PathVariable String id,
+                                                  @PathVariable String targetUserId) {
+        squadService.removeFromBlacklist(id, SecurityUtil.requireCurrentUserId(), targetUserId);
         return ApiResponse.ok();
     }
 }

@@ -63,8 +63,15 @@
     </select>
 
     <select id="searchMapBox" resultType="com.quju.platform.entity.ActivityEntity">
-        SELECT id, title, location_lat, location_lng, start_time,
+        SELECT id, title, location_name, location_lat, location_lng, start_time,
                current_participants, max_participants, activity_type, city
+               <if test="lat != null and lng != null">
+               , (6371000 * 2 * ASIN(SQRT(
+                   POWER(SIN(RADIANS(location_lat - #{lat}) / 2), 2) +
+                   COS(RADIANS(#{lat})) * COS(RADIANS(location_lat)) *
+                   POWER(SIN(RADIANS(location_lng - #{lng}) / 2), 2)
+               ))) AS distance_meters
+               </if>
         FROM activities
         WHERE status = 'published'
           AND location_lat IS NOT NULL

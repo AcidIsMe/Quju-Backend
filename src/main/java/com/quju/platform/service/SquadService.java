@@ -12,6 +12,8 @@ public interface SquadService {
     TeamEntity create(SquadCreateReq req, String leaderId);
     List<TeamEntity> list(String q, Integer limit);
     TeamEntity detail(String id);
+    /** 获取小队详情（含队长信息、成员列表、活动数） */
+    Map<String, Object> detailWithMembers(String id);
     Map<String, Object> join(String id, String userId);
     void dissolve(String id, String userId);
     TeamEntity update(String id, String userId, SquadCreateReq req);
@@ -24,4 +26,7 @@ public interface SquadService {
     void rejectRequest(String id, String userId, String requestId);
     List<SquadPointsRankResp> leaderboard(String teamId);
     void addPoints(String teamId, String userId, int points);
+    void transferLeader(String teamId, String currentLeaderId, String newLeaderId);
+    void addToBlacklist(String teamId, String operatorUserId, String targetUserId);
+    void removeFromBlacklist(String teamId, String operatorUserId, String targetUserId);
 }

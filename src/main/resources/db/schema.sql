@@ -290,6 +290,17 @@ CREATE TABLE IF NOT EXISTS im_messages (
     INDEX idx_im_messages_entity_created (entity_type, entity_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS group_chat_read_markers (
+    id VARCHAR(36) PRIMARY KEY,
+    group_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    last_read_at DATETIME(3),
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    UNIQUE KEY uk_group_read_marker (group_id, user_id),
+    INDEX idx_group_read_marker_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 扩展 entity_id 字段长度以支持私聊 "uuid:uuid" 格式
 SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.columns
