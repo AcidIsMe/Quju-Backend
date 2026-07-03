@@ -35,6 +35,12 @@ public class LlmClient {
         this.objectMapper = new ObjectMapper();
     }
 
+    public boolean isConfigured() {
+        var aiConfig = qujuProperties.getAi().getSiliconflow();
+        String apiKey = aiConfig.getApiKey();
+        return apiKey != null && !apiKey.isBlank();
+    }
+
     /**
      * 调用 DeepSeek-V3.2 进行深度审核
      *
@@ -43,7 +49,7 @@ public class LlmClient {
     public String deepReview(String title, String description, List<String> tags) {
         var aiConfig = qujuProperties.getAi().getSiliconflow();
         String apiKey = aiConfig.getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
+        if (!isConfigured()) {
             log.warn("SiliconFlow API Key 未配置，跳过 LLM 深度审核");
             return "uncertain";
         }

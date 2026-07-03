@@ -45,7 +45,7 @@ quju:
     upload-dir: uploads
   ai:
     siliconflow:
-      api-key: sk-kkcdcrgrcefalxqbhzovakhuqcvgymdnayfooazpsyyyrlti
+      api-key: ${SILICONFLOW_API_KEY:sk-kkcdcrgrcefalxqbhzovakhuqcvgymdnayfooazpsyyyrlti}
       model: Pro/deepseek-ai/DeepSeek-V3.2
       base-url: https://api.siliconflow.cn/v1
       timeout-seconds: 15
