@@ -520,7 +520,7 @@ def test_add_points():
 
 def test_blacklist():
     """黑名单管理"""
-    token_a, _ = login_as_new_user("blLeader")
+    token_a, user_a = login_as_new_user("blLeader")
     team = _create_team(token_a, "黑名单", "public")
 
     token_b, user_b = login_as_new_user("blMember")
@@ -556,7 +556,7 @@ def test_blacklist():
 
     # 拉黑队长
     _post(f"/teams/{team['id']}/blacklist",
-          {"user_id": get_user()["id"]}, headers=auth_header(token_a))
+          {"user_id": user_a["id"]}, headers=auth_header(token_a))
     assert_pass("17-黑名单 拉黑队长", _last_resp, 40000)
 
 
