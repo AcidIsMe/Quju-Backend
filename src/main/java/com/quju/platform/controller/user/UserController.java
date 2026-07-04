@@ -214,6 +214,42 @@ public class UserController {
         return ApiResponse.ok(Map.of("available", count == 0));
     }
 
+    /**
+     * 搜索用户 — 支持昵称或邮箱模糊匹配
+     * GET /api/users/search?q=keyword&limit=20
+     */
+    @GetMapping("/search")
+    public ApiResponse<List<Map<String, Object>>> search(@RequestParam String q,
+                                                          @RequestParam(defaultValue = "20") int limit) {
+        if (q == null || q.trim().isEmpty()) {
+            return ApiResponse.ok(List.of());
+        }
+        String keyword = q.trim();
+        int size = Math.min(Math.max(limit, 1), 50);
+        String currentUserId = SecurityUtil.requireCurrentUserId();
+
+        List<UserEntity> users = userMapper.selectList(
+                Wrappers.<UserEntity>lambdaQuery()
+                        .and(w -> w
+                                .like(UserEntity::getNickname, keyword)
+                                .or()
+                                .like(UserEntity::getEmail, keyword))
+                        .eq(UserEntity::getStatus, "active")
+                        .ne(UserEntity::getId, currentUserId)
+                        .last("LIMIT " + size)
+        );
+
+        return ApiResponse.ok(users.stream().map(u -> {
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("id", u.getId());
+            map.put("nickname", u.getNickname());
+            map.put("avatar_url", u.getAvatarUrl() == null ? "" : u.getAvatarUrl());
+            map.put("bio", u.getBio() == null ? "" : u.getBio());
+            map.put("interest_tags", u.getInterestTags() == null ? List.of() : u.getInterestTags());
+            return map;
+        }).toList());
+    }
+
     @GetMapping("/me/created-activities")
     public ApiResponse<?> createdActivities(@RequestParam(defaultValue = "20") Integer limit,
                                             @RequestParam(required = false) String cursor) {
