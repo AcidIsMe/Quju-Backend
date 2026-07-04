@@ -133,4 +133,9 @@ public class SquadController {
         squadService.removeFromBlacklist(id, SecurityUtil.requireCurrentUserId(), targetUserId);
         return ApiResponse.ok();
     }
+
+    @GetMapping("/{id}/chat")
+    public ApiResponse<Map<String, Object>> chatInfo(@PathVariable String id) {
+        return ApiResponse.ok(squadService.getChatInfo(id, SecurityUtil.requireCurrentUserId()));
+    }
 }

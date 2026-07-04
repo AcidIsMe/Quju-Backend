@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,6 +33,8 @@ public class SquadServiceImpl implements SquadService {
     private final TeamBlacklistMapper teamBlacklistMapper;
     private final UserMapper userMapper;
     private final ActivityMapper activityMapper;
+    private final GroupChatReadMarkerMapper groupChatReadMarkerMapper;
+    private final ImMessageMapper imMessageMapper;
     private final NotificationService notificationService;
 
     @Override
@@ -54,6 +57,10 @@ public class SquadServiceImpl implements SquadService {
         member.setUserId(leaderId);
         member.setRole("leader");
         teamMemberMapper.insert(member);
+
+        // 自动为队长创建群聊已读标记
+        ensureChatMarker(team.getId(), leaderId);
+
         return team;
     }
 
@@ -200,6 +207,7 @@ public class SquadServiceImpl implements SquadService {
         member.setUserId(userId);
         member.setRole("member");
         teamMemberMapper.insert(member);
+        ensureChatMarker(id, userId);
         team.setCurrentMembers(team.getCurrentMembers() + 1);
         teamMapper.updateById(team);
         return Map.of("status", "joined");
@@ -402,6 +410,7 @@ public class SquadServiceImpl implements SquadService {
         newMember.setUserId(request.getUserId());
         newMember.setRole("member");
         teamMemberMapper.insert(newMember);
+        ensureChatMarker(id, request.getUserId());
 
         team.setCurrentMembers(team.getCurrentMembers() + 1);
         teamMapper.updateById(team);
@@ -578,5 +587,74 @@ public class SquadServiceImpl implements SquadService {
         if (deleted == 0) {
             throw new BusinessException(40404, "该用户不在黑名单中");
         }
+    }
+
+    // ── 群聊 ──
+
+    private void ensureChatMarker(String teamId, String userId) {
+        Long exists = groupChatReadMarkerMapper.selectCount(
+                Wrappers.<GroupChatReadMarkerEntity>lambdaQuery()
+                        .eq(GroupChatReadMarkerEntity::getGroupId, teamId)
+                        .eq(GroupChatReadMarkerEntity::getUserId, userId));
+        if (exists == 0) {
+            GroupChatReadMarkerEntity marker = new GroupChatReadMarkerEntity();
+            marker.setGroupId(teamId);
+            marker.setUserId(userId);
+            marker.setLastReadAt(LocalDateTime.now());
+            groupChatReadMarkerMapper.insert(marker);
+        }
+    }
+
+    @Override
+    public Map<String, Object> getChatInfo(String teamId, String userId) {
+        TeamEntity team = detail(teamId);
+        // 校验成员身份
+        Long isMember = teamMemberMapper.selectCount(Wrappers.<TeamMemberEntity>lambdaQuery()
+                .eq(TeamMemberEntity::getTeamId, teamId)
+                .eq(TeamMemberEntity::getUserId, userId));
+        if (isMember == 0) {
+            throw new BusinessException(40300, "只有小队成员可以查看群聊");
+        }
+
+        String entityId = "team:" + teamId;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("team_id", teamId);
+        result.put("team_name", team.getName());
+        result.put("entity_type", "group");
+        result.put("entity_id", entityId);
+
+        // 最新一条消息
+        ImMessageEntity lastMsg = imMessageMapper.selectOne(Wrappers.<ImMessageEntity>lambdaQuery()
+                .eq(ImMessageEntity::getEntityType, "group")
+                .eq(ImMessageEntity::getEntityId, entityId)
+                .orderByDesc(ImMessageEntity::getCreatedAt)
+                .last("LIMIT 1"));
+        if (lastMsg != null) {
+            Map<String, Object> msg = new LinkedHashMap<>();
+            msg.put("id", lastMsg.getId());
+            msg.put("content", lastMsg.getContent());
+            msg.put("sender_id", lastMsg.getSenderId());
+            msg.put("type", lastMsg.getType());
+            msg.put("created_at", lastMsg.getCreatedAt());
+            UserEntity sender = userMapper.selectById(lastMsg.getSenderId());
+            msg.put("sender_nickname", sender != null ? sender.getNickname() : null);
+            result.put("last_message", msg);
+        }
+
+        // 未读数
+        GroupChatReadMarkerEntity marker = groupChatReadMarkerMapper.selectOne(
+                Wrappers.<GroupChatReadMarkerEntity>lambdaQuery()
+                        .eq(GroupChatReadMarkerEntity::getGroupId, teamId)
+                        .eq(GroupChatReadMarkerEntity::getUserId, userId));
+        LocalDateTime since = marker != null && marker.getLastReadAt() != null
+                ? marker.getLastReadAt() : LocalDateTime.now().minusYears(1);
+        Long unread = imMessageMapper.selectCount(Wrappers.<ImMessageEntity>lambdaQuery()
+                .eq(ImMessageEntity::getEntityType, "group")
+                .eq(ImMessageEntity::getEntityId, entityId)
+                .ne(ImMessageEntity::getSenderId, userId)
+                .gt(ImMessageEntity::getCreatedAt, since));
+        result.put("unread_count", unread);
+
+        return result;
     }
 }
