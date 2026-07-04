@@ -114,6 +114,29 @@ public class UserController {
         return ApiResponse.ok(user);
     }
 
+    @GetMapping("/search")
+    public ApiResponse<List<Map<String, Object>>> search(@RequestParam String q,
+                                                         @RequestParam(defaultValue = "20") Integer limit) {
+        int size = Math.max(1, Math.min(limit == null ? 20 : limit, 100));
+        List<UserEntity> users = userMapper.selectList(
+                Wrappers.<UserEntity>lambdaQuery()
+                        .like(UserEntity::getNickname, q)
+                        .eq(UserEntity::getStatus, "active")
+                        .last("LIMIT " + size));
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (UserEntity user : users) {
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("id", user.getId());
+            item.put("nickname", user.getNickname());
+            item.put("avatar_url", user.getAvatarUrl() == null ? "" : user.getAvatarUrl());
+            item.put("gender", user.getGender() == null ? "" : user.getGender());
+            item.put("bio", user.getBio() == null ? "" : user.getBio());
+            item.put("interest_tags", user.getInterestTags() == null ? List.of() : user.getInterestTags());
+            result.add(item);
+        }
+        return ApiResponse.ok(result);
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Map<String, Object>> publicInfo(@PathVariable String id) {
         UserEntity user = userMapper.selectById(id);

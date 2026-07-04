@@ -312,6 +312,17 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- 确保 im_messages 表有 read_at 列（私聊已读标记）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'im_messages' AND column_name = 'read_at') = 0,
+    'ALTER TABLE im_messages ADD COLUMN read_at DATETIME(3) AFTER recalled_at',
+    'SELECT ''read_at already exists'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
 SELECT 'tpl_hiking', '户外徒步', '户外徒步', '一场轻松的户外徒步活动', JSON_ARRAY('户外','徒步','周末'), '户外徒步', 240, 30, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_hiking');
