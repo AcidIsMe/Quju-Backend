@@ -1,6 +1,7 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.quju.platform.dto.im.ImMessageDto;
 import com.quju.platform.entity.FollowEntity;
 import com.quju.platform.entity.FriendshipEntity;
 import com.quju.platform.entity.UserEntity;
@@ -8,6 +9,7 @@ import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.FollowMapper;
 import com.quju.platform.mapper.FriendshipMapper;
 import com.quju.platform.mapper.UserMapper;
+import com.quju.platform.service.ImService;
 import com.quju.platform.service.NotificationService;
 import com.quju.platform.service.SocialGraphService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class SocialGraphServiceImpl implements SocialGraphService {
     private final FollowMapper followMapper;
     private final UserMapper userMapper;
     private final NotificationService notificationService;
+    private final ImService imService;
 
     @Override
     public Map<String, Object> requestFriend(String userId, String targetUserId) {
@@ -137,6 +140,37 @@ public class SocialGraphServiceImpl implements SocialGraphService {
                 nickname + " 已接受你的好友请求",
                 Map.of("friend_id", userId, "friend_nickname", nickname)
         );
+
+        // 自动发送好友问候消息
+        sendFriendGreeting(friendship.getUserId(), userId);
+    }
+
+    /**
+     * 好友关系建立后，自动发送一条"我们已经是好友啦！"消息
+     */
+    private void sendFriendGreeting(String userA, String userB) {
+        try {
+            // 私聊 entity_id 按字母序拼接
+            String entityId;
+            if (userA.compareTo(userB) < 0) {
+                entityId = userA + ":" + userB;
+            } else {
+                entityId = userB + ":" + userA;
+            }
+
+            ImMessageDto dto = new ImMessageDto();
+            dto.setEntityType("private");
+            dto.setEntityId(entityId);
+            dto.setType("text");
+            dto.setContent("我们已经是好友啦！");
+            dto.setMentionAll(false);
+            dto.setMentionUserIds(List.of());
+            dto.setMetadata(Map.of());
+
+            imService.send(dto, userB);
+        } catch (Exception e) {
+            // 消息发送失败不影响好友关系建立
+        }
     }
 
     @Override
