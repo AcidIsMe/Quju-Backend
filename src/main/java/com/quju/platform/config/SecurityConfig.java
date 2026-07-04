@@ -49,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/discover/**").permitAll()
                         .requestMatchers("/ai/**").permitAll()
                         .requestMatchers("/files/upload").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/users/check-nickname").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers("/ws/im").permitAll()
