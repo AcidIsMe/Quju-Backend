@@ -11,6 +11,7 @@ import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.CheckInService;
+import com.quju.platform.service.SquadService;
 import com.quju.platform.util.QrCodeGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CheckInServiceImpl implements CheckInService {
     private final UserMapper userMapper;
     private final QrCodeGenerator qrCodeGenerator;
     private final MapSdkService mapSdkService;
+    private final SquadService squadService;
 
     @Override
     @Transactional
@@ -63,6 +65,15 @@ public class CheckInServiceImpl implements CheckInService {
         registration.setStatus("checked_in");
         registration.setCheckedInAt(LocalDateTime.now());
         registrationMapper.updateById(registration);
+
+        // US35: Auto-award points for team activity check-in
+        if (Boolean.TRUE.equals(activity.getTeamActivity()) && activity.getTeamId() != null) {
+            try {
+                squadService.addPoints(activity.getTeamId(), userId, 5);
+            } catch (Exception ignored) {
+                // Non-squad member or other issue — silently skip
+            }
+        }
     }
 
     @Override

@@ -82,4 +82,13 @@ public class ImController {
         long count = imService.getTotalUnreadCount(SecurityUtil.requireCurrentUserId());
         return ApiResponse.ok(Map.of("count", count));
     }
+
+    /**
+     * 转发消息到目标会话
+     */
+    @PostMapping("/messages/{id}/forward")
+    public ApiResponse<ImMessageEntity> forward(@PathVariable String id, @RequestBody Map<String, String> body) {
+        return ApiResponse.ok(imService.forward(id, SecurityUtil.requireCurrentUserId(),
+                body.get("target_entity_type"), body.get("target_entity_id")));
+    }
 }
