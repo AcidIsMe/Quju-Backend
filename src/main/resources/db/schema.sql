@@ -233,6 +233,74 @@ CREATE TABLE IF NOT EXISTS team_blacklist (
     PRIMARY KEY (team_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS team_announcements (
+    id VARCHAR(36) PRIMARY KEY,
+    team_id VARCHAR(36) NOT NULL,
+    content TEXT NOT NULL,
+    pinned BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by VARCHAR(36) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_team_announcements_team (team_id, pinned DESC, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS team_albums (
+    id VARCHAR(36) PRIMARY KEY,
+    team_id VARCHAR(36) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(500),
+    cover_image_url VARCHAR(500),
+    photo_count INT NOT NULL DEFAULT 0,
+    created_by VARCHAR(36) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_team_albums_team (team_id, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS team_photos (
+    id VARCHAR(36) PRIMARY KEY,
+    album_id VARCHAR(36) NOT NULL,
+    team_id VARCHAR(36) NOT NULL,
+    image_url VARCHAR(500) NOT NULL,
+    thumbnail_url VARCHAR(500),
+    description VARCHAR(200),
+    uploaded_by VARCHAR(36) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_team_photos_album (album_id, sort_order, created_at DESC),
+    INDEX idx_team_photos_team (team_id, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 小队投票
+CREATE TABLE IF NOT EXISTS team_polls (
+    id VARCHAR(36) PRIMARY KEY,
+    team_id VARCHAR(36) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    created_by VARCHAR(36) NOT NULL,
+    closed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    closed_at DATETIME(3),
+    INDEX idx_team_polls_team (team_id, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS poll_options (
+    id VARCHAR(36) PRIMARY KEY,
+    poll_id VARCHAR(36) NOT NULL,
+    option_text VARCHAR(200) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_poll_options_poll (poll_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    id VARCHAR(36) PRIMARY KEY,
+    poll_id VARCHAR(36) NOT NULL,
+    option_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    UNIQUE KEY uk_poll_vote (poll_id, user_id),
+    INDEX idx_poll_votes_option (option_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS activity_summaries (
     id VARCHAR(36) PRIMARY KEY,
     activity_id VARCHAR(36) NOT NULL UNIQUE,

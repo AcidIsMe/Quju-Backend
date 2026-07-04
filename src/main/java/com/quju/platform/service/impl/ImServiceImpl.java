@@ -9,6 +9,7 @@ import com.quju.platform.mapper.*;
 import com.quju.platform.service.ImService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -298,5 +299,73 @@ public class ImServiceImpl implements ImService {
             return parts[0].equals(myUserId) ? parts[1] : parts[0];
         }
         return "";
+    }
+
+    @Override
+    @Transactional
+    public ImMessageEntity forward(String messageId, String userId, String targetEntityType, String targetEntityId) {
+        // 验证源消息存在
+        ImMessageEntity source = imMessageMapper.selectById(messageId);
+        if (source == null) {
+            throw new BusinessException(40405, "消息不存在");
+        }
+        if (source.getRecalled() != null && source.getRecalled()) {
+            throw new BusinessException(40001, "不能转发已撤回的消息");
+        }
+
+        // 验证用户对源消息的访问权限
+        validateMessageAccess(source.getEntityType(), source.getEntityId(), userId);
+
+        // 验证目标会话的访问权限
+        validateMessageAccess(targetEntityType, targetEntityId, userId);
+
+        // 创建新消息（复制内容、类型和元数据）
+        ImMessageEntity forwarded = new ImMessageEntity();
+        forwarded.setEntityType(targetEntityType);
+        forwarded.setEntityId(targetEntityId);
+        forwarded.setSenderId(userId);
+        forwarded.setType(source.getType());
+        forwarded.setContent(source.getContent());
+        forwarded.setMetadata(source.getMetadata());
+        forwarded.setRecalled(false);
+        imMessageMapper.insert(forwarded);
+        return forwarded;
+    }
+
+    /**
+     * 验证用户是否有权访问指定会话
+     */
+    private void validateMessageAccess(String entityType, String entityId, String userId) {
+        if ("private".equals(entityType)) {
+            String[] parts = entityId.split(":");
+            if (parts.length != 2) {
+                throw new BusinessException(40000, "私聊entity_id格式错误");
+            }
+            if (!userId.equals(parts[0]) && !userId.equals(parts[1])) {
+                throw new BusinessException(40300, "无权访问该私聊会话");
+            }
+            // 验证好友关系
+            String otherUserId = parts[0].equals(userId) ? parts[1] : parts[0];
+            long friendCount = friendshipMapper.selectCount(Wrappers.<FriendshipEntity>lambdaQuery()
+                    .and(w -> w.eq(FriendshipEntity::getUserId, userId)
+                            .eq(FriendshipEntity::getFriendId, otherUserId)
+                            .or()
+                            .eq(FriendshipEntity::getUserId, otherUserId)
+                            .eq(FriendshipEntity::getFriendId, userId))
+                    .eq(FriendshipEntity::getStatus, "accepted"));
+            if (friendCount == 0) {
+                throw new BusinessException(40300, "不是好友关系，无法转发消息");
+            }
+        } else if ("group".equals(entityType)) {
+            String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
+            Long membershipCount = teamMemberMapper.selectCount(Wrappers.<TeamMemberEntity>lambdaQuery()
+                    .eq(TeamMemberEntity::getTeamId, groupId)
+                    .eq(TeamMemberEntity::getUserId, userId));
+            if (membershipCount == 0) {
+                throw new BusinessException(40300, "您不是该群聊成员，无法转发消息");
+            }
+        } else {
+            throw new BusinessException(40000, "不支持的消息会话类型");
+        }
     }
 }
