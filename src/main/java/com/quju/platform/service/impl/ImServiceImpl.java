@@ -83,6 +83,7 @@ public class ImServiceImpl implements ImService {
         entity.setContent(dto.getContent());
         entity.setMetadata(dto.getMetadata());
         entity.setRecalled(false);
+        entity.setCreatedAt(LocalDateTime.now());
         imMessageMapper.insert(entity);
 
         // 构建广播消息
@@ -93,7 +94,7 @@ public class ImServiceImpl implements ImService {
         broadcast.put("entity_id", entity.getEntityId());
         broadcast.put("sender_id", senderId);
         broadcast.put("content", entity.getContent());
-        broadcast.put("created_at", entity.getCreatedAt() != null ? entity.getCreatedAt().toString() : "");
+        broadcast.put("created_at", entity.getCreatedAt().toString());
 
         // WebSocket 推送
         pushToRecipients(entity.getEntityType(), entity.getEntityId(), senderId, broadcast);
