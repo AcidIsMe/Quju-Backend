@@ -26,4 +26,7 @@ public interface SocialGraphService {
     List<Map<String, Object>> followersOfUser(String targetUserId);
     /** 查询指定用户的关注列表 */
     List<Map<String, Object>> followingOfUser(String targetUserId);
+
+    /** 通过二维码添加好友 — 直接建立双向好友关系 */
+    Map<String, Object> addByQrcode(String userId, String ownerUserId);
 }
