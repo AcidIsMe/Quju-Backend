@@ -970,6 +970,46 @@ license_image: <file>
 
 ---
 
+#### GET `/api/discover/teams`
+
+小队发现信息流（首页小队推荐）
+
+**Query:**
+
+```Plain Text
+?tab=recommended&cursor=&limit=20
+```
+
+- `tab`: `recommended`（推荐，按成员数降序）/ `latest`（最新，按创建时间降序）
+- `cursor`: 游标分页
+- `limit`: 每页数量，默认 20，最大 50
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "周末徒步小队",
+      "description": "...",
+      "interest_tags": ["户外","徒步"],
+      "join_type": "public",
+      "max_members": 50,
+      "current_members": 32,
+      "avatar_url": "https://...",
+      "status": "active",
+      "leader_id": "uuid",
+      "created_at": "2024-06-01T10:00:00"
+    }
+  ],
+  "pagination": { "next_cursor": "...", "has_more": true, "limit": 20 }
+}
+```
+
+---
+
 ### 2\.6 报名模块 \(Registrations\)
 
 #### POST `/api/activities/:id/register`
@@ -1729,6 +1769,37 @@ images: [file1, file2, file3, ...]
   ]
 }
 ```
+
+---
+
+#### GET `/api/teams/:id/chat`
+
+获取小队群聊信息（仅成员可查看）
+
+**Response \(200\):**
+
+```JSON
+{
+  "code": 0,
+  "data": {
+    "team_id": "uuid",
+    "team_name": "周末徒步小队",
+    "entity_type": "group",
+    "entity_id": "team:uuid",
+    "last_message": {
+      "id": "msg-uuid",
+      "content": "明天几点集合？",
+      "sender_id": "uuid",
+      "sender_nickname": "张三",
+      "type": "text",
+      "created_at": "2024-06-15T10:00:00"
+    },
+    "unread_count": 3
+  }
+}
+```
+
+> 群聊消息通过 IM 模块的 WebSocket 实时通讯（`ws://.../ws/im?token=jwt`），消息类型为 `entity_type=group`、`entity_id=team:{teamId}`。创建小队和成员加入时自动初始化群聊已读标记。
 
 ---
 
