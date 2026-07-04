@@ -4,11 +4,13 @@ import com.quju.platform.dto.activity.ActivityQueryReq;
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.entity.ActivityEntity;
+import com.quju.platform.entity.TeamEntity;
 import com.quju.platform.service.DiscoveryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
@@ -60,6 +62,20 @@ public class DiscoveryController {
         }
         // AC5: 既无边界框也无位置 → 提示需要位置权限（由 service 层抛出 40010）
         CursorPage<ActivityEntity> page = discoveryService.nearby(req);
+        return ApiResponse.page(page.getItems(), paginationMap(page));
+    }
+
+    @GetMapping("/teams")
+    public ApiResponse<?> discoverTeams(@RequestParam(defaultValue = "recommended") String tab,
+                                        @RequestParam(required = false) String cursor,
+                                        @RequestParam(defaultValue = "20") int limit) {
+        int size = Math.max(1, Math.min(limit, 50));
+        CursorPage<TeamEntity> page;
+        if ("latest".equals(tab)) {
+            page = discoveryService.latestTeams(cursor, size);
+        } else {
+            page = discoveryService.recommendedTeams(cursor, size);
+        }
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
 

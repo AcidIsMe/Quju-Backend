@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.dto.activity.ActivityQueryReq;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.entity.ActivityEntity;
+import com.quju.platform.entity.TeamEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
+import com.quju.platform.mapper.TeamMapper;
 import com.quju.platform.service.DiscoveryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ import java.util.List;
 public class DiscoveryServiceImpl implements DiscoveryService {
 
     private final ActivityMapper activityMapper;
+    private final TeamMapper teamMapper;
 
     @Override
     public CursorPage<ActivityEntity> latest(ActivityQueryReq req) {
@@ -157,5 +160,51 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .toList();
+    }
+
+    // ── 小队发现 ──
+
+    @Override
+    public CursorPage<TeamEntity> recommendedTeams(String cursor, int limit) {
+        LambdaQueryWrapper<TeamEntity> wrapper = Wrappers.<TeamEntity>lambdaQuery()
+                .eq(TeamEntity::getStatus, "active");
+        applyTeamCursor(wrapper, cursor);
+        wrapper.orderByDesc(TeamEntity::getCurrentMembers)
+                .orderByDesc(TeamEntity::getCreatedAt)
+                .orderByDesc(TeamEntity::getId);
+        List<TeamEntity> items = teamMapper.selectList(wrapper.last("LIMIT " + (limit + 1)));
+        return CursorPage.of(items, limit, e -> {
+            LocalDateTime t = e.getCreatedAt();
+            return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
+        });
+    }
+
+    @Override
+    public CursorPage<TeamEntity> latestTeams(String cursor, int limit) {
+        LambdaQueryWrapper<TeamEntity> wrapper = Wrappers.<TeamEntity>lambdaQuery()
+                .eq(TeamEntity::getStatus, "active");
+        applyTeamCursor(wrapper, cursor);
+        wrapper.orderByDesc(TeamEntity::getCreatedAt).orderByDesc(TeamEntity::getId);
+        List<TeamEntity> items = teamMapper.selectList(wrapper.last("LIMIT " + (limit + 1)));
+        return CursorPage.of(items, limit, e -> {
+            LocalDateTime t = e.getCreatedAt();
+            return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
+        });
+    }
+
+    private void applyTeamCursor(LambdaQueryWrapper<TeamEntity> wrapper, String cursor) {
+        if (cursor == null || cursor.isBlank() || !cursor.contains("|")) return;
+        String[] parts = cursor.split("\\|", 2);
+        if (parts.length < 2) return;
+        try {
+            LocalDateTime time = LocalDateTime.parse(parts[0]);
+            String id = parts[1];
+            wrapper.and(w -> w
+                    .lt(TeamEntity::getCreatedAt, time)
+                    .or(w2 -> w2
+                            .eq(TeamEntity::getCreatedAt, time)
+                            .lt(TeamEntity::getId, id)));
+        } catch (Exception ignored) {
+        }
     }
 }
