@@ -53,6 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers("/ws/im").permitAll()
                         .requestMatchers(HttpMethod.GET, "/activities/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/merchants").permitAll()
                         .requestMatchers("/admin/**").hasRole("admin")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex

@@ -7,6 +7,7 @@ import com.quju.platform.entity.UserEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.MerchantProfileMapper;
 import com.quju.platform.mapper.UserMapper;
+import com.quju.platform.service.MerchantService;
 import com.quju.platform.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,18 @@ public class MerchantController {
 
     private final MerchantProfileMapper merchantProfileMapper;
     private final UserMapper userMapper;
+    private final MerchantService merchantService;
+
+    @GetMapping
+    public ApiResponse<List<Map<String, Object>>> list(@RequestParam(required = false) String q,
+                                                        @RequestParam(required = false) String domain,
+                                                        @RequestParam(defaultValue = "1") Integer page,
+                                                        @RequestParam(defaultValue = "10") Integer size) {
+        Map<String, Object> result = merchantService.listApproved(q, domain, page, size);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
+        return ApiResponse.page(data, result.get("pagination"));
+    }
 
     @GetMapping("/me")
     public ApiResponse<MerchantProfileEntity> myProfile() {

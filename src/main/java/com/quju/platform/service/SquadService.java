@@ -29,4 +29,5 @@ public interface SquadService {
     void transferLeader(String teamId, String currentLeaderId, String newLeaderId);
     void addToBlacklist(String teamId, String operatorUserId, String targetUserId);
     void removeFromBlacklist(String teamId, String operatorUserId, String targetUserId);
+    Map<String, Object> getChatInfo(String teamId, String userId);
 }
