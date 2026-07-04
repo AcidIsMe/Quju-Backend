@@ -1,13 +1,11 @@
 package com.quju.platform.component.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.quju.platform.entity.GroupChatReadMarkerEntity;
-import com.quju.platform.entity.ImMessageEntity;
+import com.quju.platform.dto.im.ImMessageDto;
 import com.quju.platform.entity.TeamMemberEntity;
-import com.quju.platform.mapper.GroupChatReadMarkerMapper;
-import com.quju.platform.mapper.ImMessageMapper;
-import com.quju.platform.mapper.FriendshipMapper;
+import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.TeamMemberMapper;
+import com.quju.platform.service.ImService;
 import com.quju.platform.util.JwtTokenUtil;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +18,6 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.net.URI;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,10 +28,8 @@ public class ImWebSocketServer extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ImWebSocketServer.class);
 
     private final SessionManager sessionManager;
-    private final ImMessageMapper imMessageMapper;
-    private final FriendshipMapper friendshipMapper;
+    private final ImService imService;
     private final TeamMemberMapper teamMemberMapper;
-    private final GroupChatReadMarkerMapper groupChatReadMarkerMapper;
     private final ObjectMapper objectMapper;
     private final JwtTokenUtil jwtTokenUtil;
 
@@ -52,7 +47,6 @@ public class ImWebSocketServer extends TextWebSocketHandler {
             return;
         }
 
-        // Parse query parameters
         Map<String, String> params = parseQueryParams(query);
         String token = params.get("token");
         if (token == null || token.isBlank()) {
@@ -60,7 +54,6 @@ public class ImWebSocketServer extends TextWebSocketHandler {
             return;
         }
 
-        // Validate JWT token
         String userId;
         try {
             Claims claims = jwtTokenUtil.parse(token);
@@ -75,7 +68,6 @@ public class ImWebSocketServer extends TextWebSocketHandler {
             return;
         }
 
-        // Store session with userId for multiple device support
         sessionManager.put(userId, session);
         log.info("WebSocket connected: userId={}, sessionId={}", userId, session.getId());
     }
@@ -135,83 +127,21 @@ public class ImWebSocketServer extends TextWebSocketHandler {
             return;
         }
 
-        // 私聊模式校验好友关系
-        if ("private".equals(entityType)) {
-            String[] parts = entityId.split(":");
-            if (parts.length != 2) {
-                session.sendMessage(new TextMessage(
-                        "{\"type\":\"error\",\"message\":\"私聊entity_id格式错误\"}"));
-                return;
-            }
-            String otherUserId = parts[0].equals(senderId) ? parts[1] : parts[0];
+        // 复用 Service 层的校验 + 存储 + WebSocket 推送
+        try {
+            ImMessageDto dto = new ImMessageDto();
+            dto.setEntityType(entityType);
+            dto.setEntityId(entityId);
+            dto.setType(msgType);
+            dto.setContent(content);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = (Map<String, Object>) payload.get("metadata");
+            dto.setMetadata(metadata);
 
-            // 校验是否好友
-            long friendCount = friendshipMapper.selectCount(
-                    com.baomidou.mybatisplus.core.toolkit.Wrappers
-                            .<com.quju.platform.entity.FriendshipEntity>lambdaQuery()
-                            .and(w -> w
-                                    .eq(com.quju.platform.entity.FriendshipEntity::getUserId, senderId)
-                                    .eq(com.quju.platform.entity.FriendshipEntity::getFriendId, otherUserId)
-                                    .or()
-                                    .eq(com.quju.platform.entity.FriendshipEntity::getUserId, otherUserId)
-                                    .eq(com.quju.platform.entity.FriendshipEntity::getFriendId, senderId))
-                            .eq(com.quju.platform.entity.FriendshipEntity::getStatus, "accepted"));
-            if (friendCount == 0) {
-                session.sendMessage(new TextMessage(
-                        "{\"type\":\"error\",\"message\":\"不是好友关系，无法发送消息\"}"));
-                return;
-            }
-        }
-
-        // 群聊模式校验群成员身份
-        if ("group".equals(entityType)) {
-            String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
-            Long membershipCount = teamMemberMapper.selectCount(
-                    com.baomidou.mybatisplus.core.toolkit.Wrappers
-                            .<TeamMemberEntity>lambdaQuery()
-                            .eq(TeamMemberEntity::getTeamId, groupId)
-                            .eq(TeamMemberEntity::getUserId, senderId));
-            if (membershipCount == 0) {
-                session.sendMessage(new TextMessage(
-                        "{\"type\":\"error\",\"message\":\"您不是该群聊成员，无法发送消息\"}"));
-                return;
-            }
-        }
-
-        // 保存消息
-        ImMessageEntity msg = new ImMessageEntity();
-        msg.setEntityType(entityType);
-        msg.setEntityId(entityId);
-        msg.setSenderId(senderId);
-        msg.setType(msgType);
-        msg.setContent(content);
-        msg.setRecalled(false);
-        msg.setCreatedAt(LocalDateTime.now());
-        imMessageMapper.insert(msg);
-
-        // 构建广播消息
-        Map<String, Object> broadcast = new LinkedHashMap<>();
-        broadcast.put("type", "new_message");
-        broadcast.put("message_id", msg.getId());
-        broadcast.put("entity_type", entityType);
-        broadcast.put("entity_id", entityId);
-        broadcast.put("sender_id", senderId);
-        broadcast.put("content", content);
-        broadcast.put("created_at", msg.getCreatedAt().toString());
-        String broadcastJson = objectMapper.writeValueAsString(broadcast);
-
-        // 私聊：发送给发送方和接收方
-        if ("private".equals(entityType)) {
-            String[] parts = entityId.split(":");
-            String otherUserId = parts[0].equals(senderId) ? parts[1] : parts[0];
-            sendToUser(senderId, broadcastJson);
-            sendToUser(otherUserId, broadcastJson);
-        } else if ("group".equals(entityType)) {
-            // 群聊：广播给所有在线群成员（含发送方，用于发送方多设备同步）
-            broadcastToGroup(entityId, senderId, broadcastJson);
-        } else {
-            // 其他模式：仅发送给发送方确认
-            sendToUser(senderId, broadcastJson);
+            imService.send(dto, senderId);
+        } catch (BusinessException e) {
+            session.sendMessage(new TextMessage(
+                    "{\"type\":\"error\",\"message\":\"" + e.getMessage() + "\"}"));
         }
     }
 
@@ -229,13 +159,11 @@ public class ImWebSocketServer extends TextWebSocketHandler {
         typingMsg.put("user_id", userId);
         String json = objectMapper.writeValueAsString(typingMsg);
 
-        // 私聊：转发给对方
         if ("private".equals(entityType)) {
             String[] parts = entityId.split(":");
             String otherUserId = parts[0].equals(userId) ? parts[1] : parts[0];
             sendToUser(otherUserId, json);
         } else if ("group".equals(entityType)) {
-            // 群聊：广播给所有在线群成员（不含发送方）
             broadcastToGroupExcludeSender(entityId, userId, json);
         }
     }
@@ -247,41 +175,11 @@ public class ImWebSocketServer extends TextWebSocketHandler {
 
         if (entityType == null || entityId == null) return;
 
-        if ("group".equals(entityType)) {
-            // 群聊：更新已读标记（记录用户最后阅读时间）
-            String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
-            GroupChatReadMarkerEntity marker = groupChatReadMarkerMapper.selectOne(
-                    com.baomidou.mybatisplus.core.toolkit.Wrappers
-                            .<GroupChatReadMarkerEntity>lambdaQuery()
-                            .eq(GroupChatReadMarkerEntity::getGroupId, groupId)
-                            .eq(GroupChatReadMarkerEntity::getUserId, userId));
-            LocalDateTime now = LocalDateTime.now();
-            if (marker == null) {
-                marker = new GroupChatReadMarkerEntity();
-                marker.setGroupId(groupId);
-                marker.setUserId(userId);
-                marker.setLastReadAt(now);
-                groupChatReadMarkerMapper.insert(marker);
-            } else {
-                marker.setLastReadAt(now);
-                groupChatReadMarkerMapper.updateById(marker);
-            }
-        } else {
-            // 私聊：标记对方发送的消息为已读
-            String otherUserId = getOtherUserId(entityId, userId);
-            if (otherUserId != null) {
-                List<ImMessageEntity> unread = imMessageMapper.selectList(
-                        com.baomidou.mybatisplus.core.toolkit.Wrappers
-                                .<ImMessageEntity>lambdaQuery()
-                                .eq(ImMessageEntity::getEntityType, entityType)
-                                .eq(ImMessageEntity::getEntityId, entityId)
-                                .eq(ImMessageEntity::getSenderId, otherUserId)
-                                .isNull(ImMessageEntity::getReadAt));
-                for (ImMessageEntity m : unread) {
-                    m.setReadAt(LocalDateTime.now());
-                    imMessageMapper.updateById(m);
-                }
-            }
+        // 复用 Service 层的已读标记逻辑
+        try {
+            imService.markRead(entityType, entityId, userId);
+        } catch (Exception e) {
+            log.warn("标记已读失败: {}", e.getMessage());
         }
 
         // 回复已读确认
@@ -310,21 +208,7 @@ public class ImWebSocketServer extends TextWebSocketHandler {
     }
 
     /**
-     * 广播群聊消息给所有在线群成员（含发送方，用于多设备同步）
-     */
-    private void broadcastToGroup(String entityId, String senderId, String message) {
-        String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
-        List<TeamMemberEntity> members = teamMemberMapper.selectList(
-                com.baomidou.mybatisplus.core.toolkit.Wrappers
-                        .<TeamMemberEntity>lambdaQuery()
-                        .eq(TeamMemberEntity::getTeamId, groupId));
-        for (TeamMemberEntity member : members) {
-            sendToUser(member.getUserId(), message);
-        }
-    }
-
-    /**
-     * 广播消息给群聊中除发送方外的所有在线成员
+     * 广播消息给群聊中除发送方外的所有在线成员（用于 typing 等瞬时状态）
      */
     private void broadcastToGroupExcludeSender(String entityId, String senderId, String message) {
         String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
@@ -351,14 +235,6 @@ public class ImWebSocketServer extends TextWebSocketHandler {
             if (entry.getValue().equals(session)) {
                 return entry.getKey();
             }
-        }
-        return null;
-    }
-
-    private String getOtherUserId(String entityId, String myUserId) {
-        String[] parts = entityId.split(":");
-        if (parts.length == 2) {
-            return parts[0].equals(myUserId) ? parts[1] : parts[0];
         }
         return null;
     }
