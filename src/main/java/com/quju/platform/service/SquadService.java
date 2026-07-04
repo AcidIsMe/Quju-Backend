@@ -10,10 +10,11 @@ import java.util.Map;
 
 public interface SquadService {
     TeamEntity create(SquadCreateReq req, String leaderId);
-    List<TeamEntity> list(String q, Integer limit);
+    List<TeamEntity> list(String q, String interestTags, String sort, String cursor, Integer limit);
+    List<Map<String, Object>> recommend(String userId, int limit);
     TeamEntity detail(String id);
-    /** 获取小队详情（含队长信息、成员列表、活动数） */
-    Map<String, Object> detailWithMembers(String id);
+    /** 获取小队详情（含队长信息、成员列表、活动数、当前用户角色） */
+    Map<String, Object> detailWithMembers(String id, String viewerId);
     Map<String, Object> join(String id, String userId);
     void dissolve(String id, String userId);
     TeamEntity update(String id, String userId, SquadCreateReq req);

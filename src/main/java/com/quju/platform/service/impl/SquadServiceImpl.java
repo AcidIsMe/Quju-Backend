@@ -1,7 +1,6 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.quju.platform.dto.social.SquadCreateReq;
 import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.*;
@@ -65,11 +64,140 @@ public class SquadServiceImpl implements SquadService {
     }
 
     @Override
-    public List<TeamEntity> list(String q, Integer limit) {
-        return teamMapper.selectPage(new Page<>(1, limit == null ? 20 : limit), Wrappers.<TeamEntity>lambdaQuery()
+    public List<TeamEntity> list(String q, String interestTags, String sort, String cursor, Integer limit) {
+        var wrapper = Wrappers.<TeamEntity>lambdaQuery()
                 .eq(TeamEntity::getStatus, "active")
-                .like(q != null && !q.isBlank(), TeamEntity::getName, q)
-                .orderByDesc(TeamEntity::getCreatedAt)).getRecords();
+                .like(q != null && !q.isBlank(), TeamEntity::getName, q);
+
+        // 按兴趣标签过滤：标签之间为 OR 关系
+        if (interestTags != null && !interestTags.isBlank()) {
+            String[] tags = interestTags.split(",");
+            wrapper.and(w -> {
+                boolean first = true;
+                for (String raw : tags) {
+                    String tag = raw.trim();
+                    if (tag.isEmpty()) continue;
+                    if (first) {
+                        w.apply("JSON_CONTAINS(interest_tags, {0})", "\"" + tag + "\"");
+                        first = false;
+                    } else {
+                        w.or().apply("JSON_CONTAINS(interest_tags, {0})", "\"" + tag + "\"");
+                    }
+                }
+            });
+        }
+
+        // 排序
+        if ("popular".equals(sort)) {
+            wrapper.orderByDesc(TeamEntity::getCurrentMembers);
+        } else {
+            wrapper.orderByDesc(TeamEntity::getCreatedAt);
+        }
+
+        // 游标分页
+        if (cursor != null && !cursor.isBlank()) {
+            if ("popular".equals(sort)) {
+                try {
+                    wrapper.lt(TeamEntity::getCurrentMembers, Integer.parseInt(cursor));
+                } catch (NumberFormatException ignored) {
+                }
+            } else {
+                try {
+                    wrapper.lt(TeamEntity::getCreatedAt, LocalDateTime.parse(cursor));
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        int effectiveLimit = Math.max(1, Math.min(limit == null ? 20 : limit, 50));
+        wrapper.last("LIMIT " + effectiveLimit);
+
+        return teamMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<Map<String, Object>> recommend(String userId, int limit) {
+        UserEntity user = userMapper.selectById(userId);
+        List<String> userTags = (user != null && user.getInterestTags() != null)
+                ? user.getInterestTags() : List.of();
+
+        // 收集用户已加入或已被拉黑的小队ID，推荐时排除
+        List<String> excludeIds = new ArrayList<>();
+        List<TeamMemberEntity> userMemberships = teamMemberMapper.selectList(
+                Wrappers.<TeamMemberEntity>lambdaQuery()
+                        .eq(TeamMemberEntity::getUserId, userId));
+        for (TeamMemberEntity m : userMemberships) {
+            excludeIds.add(m.getTeamId());
+        }
+        List<TeamBlacklistEntity> blacklists = teamBlacklistMapper.selectList(
+                Wrappers.<TeamBlacklistEntity>lambdaQuery()
+                        .eq(TeamBlacklistEntity::getUserId, userId));
+        for (TeamBlacklistEntity b : blacklists) {
+            if (!excludeIds.contains(b.getTeamId())) {
+                excludeIds.add(b.getTeamId());
+            }
+        }
+
+        // 查询活跃小队
+        var wrapper = Wrappers.<TeamEntity>lambdaQuery()
+                .eq(TeamEntity::getStatus, "active");
+        if (!excludeIds.isEmpty()) {
+            wrapper.notIn(TeamEntity::getId, excludeIds);
+        }
+        List<TeamEntity> candidates = teamMapper.selectList(wrapper);
+
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+
+        // 批量统计各小队的活动数量
+        Map<String, Long> activityCounts = new HashMap<>();
+        for (TeamEntity team : candidates) {
+            long count = activityMapper.selectCount(
+                    Wrappers.<ActivityEntity>lambdaQuery()
+                            .eq(ActivityEntity::getTeamId, team.getId())
+                            .eq(ActivityEntity::getTeamActivity, true));
+            activityCounts.put(team.getId(), count);
+        }
+
+        // 打分：匹配标签数×10 + 当前成员数×0.01 + 活动数×3
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TeamEntity team : candidates) {
+            int matchCount = 0;
+            if (userTags != null && team.getInterestTags() != null) {
+                for (String tag : team.getInterestTags()) {
+                    if (userTags.contains(tag)) {
+                        matchCount++;
+                    }
+                }
+            }
+            double score = (matchCount * 10.0)
+                    + ((team.getCurrentMembers() != null ? team.getCurrentMembers() : 0) * 0.01)
+                    + (activityCounts.getOrDefault(team.getId(), 0L) * 3.0);
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", team.getId());
+            item.put("name", team.getName());
+            item.put("description", team.getDescription());
+            item.put("interest_tags", team.getInterestTags());
+            item.put("join_type", team.getJoinType());
+            item.put("current_members", team.getCurrentMembers());
+            item.put("max_members", team.getMaxMembers());
+            item.put("avatar_url", team.getAvatarUrl());
+            item.put("status", team.getStatus());
+            item.put("match_score", Math.round(score * 100.0) / 100.0);
+            result.add(item);
+        }
+
+        // 按得分降序排列
+        result.sort((a, b) -> Double.compare(
+                (Double) b.get("match_score"),
+                (Double) a.get("match_score")));
+
+        if (result.size() > limit) {
+            return result.subList(0, limit);
+        }
+        return result;
     }
 
     @Override
@@ -82,7 +210,7 @@ public class SquadServiceImpl implements SquadService {
     }
 
     @Override
-    public Map<String, Object> detailWithMembers(String id) {
+    public Map<String, Object> detailWithMembers(String id, String viewerId) {
         TeamEntity team = detail(id);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", team.getId());
@@ -134,6 +262,15 @@ public class SquadServiceImpl implements SquadService {
             memberList.add(mi);
         }
         result.put("members", memberList);
+
+        // 当前查看者的角色（可为 null）
+        if (viewerId != null) {
+            TeamMemberEntity viewerMember = teamMemberMapper.selectOne(
+                    com.baomidou.mybatisplus.core.toolkit.Wrappers.<TeamMemberEntity>lambdaQuery()
+                            .eq(TeamMemberEntity::getTeamId, id)
+                            .eq(TeamMemberEntity::getUserId, viewerId));
+            result.put("my_role", viewerMember != null ? viewerMember.getRole() : null);
+        }
 
         return result;
     }

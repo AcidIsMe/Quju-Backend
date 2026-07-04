@@ -25,4 +25,7 @@ public interface ImService {
 
     /** 获取总未读消息数 */
     long getTotalUnreadCount(String userId);
+
+    /** 转发消息到目标会话 */
+    ImMessageEntity forward(String messageId, String userId, String targetEntityType, String targetEntityId);
 }
