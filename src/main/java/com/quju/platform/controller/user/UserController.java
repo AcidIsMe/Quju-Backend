@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -238,7 +239,11 @@ public class UserController {
         applyCursorDesc(wrapper, cursor);
         wrapper.orderByDesc(ActivityEntity::getCreatedAt).orderByDesc(ActivityEntity::getId);
         List<ActivityEntity> items = activityMapper.selectList(wrapper.last("LIMIT " + (size + 1)));
-        CursorPage<ActivityEntity> page = CursorPage.of(items, size, e -> e.getCreatedAt() + "|" + e.getId());
+        // 转换为标准 Map 格式（snake_case + display_status）
+        List<Map<String, Object>> data = items.stream()
+                .map(this::toActivityMap)
+                .toList();
+        CursorPage<Map<String, Object>> page = CursorPage.of(data, size, e -> e.get("created_at") + "|" + e.get("id"));
         return ApiResponse.page(page.getItems(), paginationMap(page));
     }
 
@@ -374,5 +379,61 @@ public class UserController {
                             .lt(ActivityEntity::getId, id)));
         } catch (Exception ignored) {
         }
+    }
+
+    /** 将 ActivityEntity 转换为统一 Map 格式（snake_case + display_status） */
+    private Map<String, Object> toActivityMap(ActivityEntity e) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", e.getId());
+        map.put("creator_id", e.getCreatorId());
+        map.put("title", e.getTitle());
+        map.put("description", e.getDescription());
+        map.put("tags", e.getTags());
+        map.put("activity_type", e.getActivityType());
+        map.put("cover_image_url", e.getCoverImageUrl());
+        map.put("start_time", e.getStartTime());
+        map.put("end_time", e.getEndTime());
+        map.put("registration_deadline", e.getRegistrationDeadline());
+        map.put("max_participants", e.getMaxParticipants());
+        map.put("current_participants", e.getCurrentParticipants());
+        map.put("min_credit_score", e.getMinCreditScore());
+        map.put("min_age", e.getMinAge());
+        map.put("fee_type", e.getFeeType());
+        map.put("fee_amount", e.getFeeAmount());
+        map.put("city", e.getCity());
+        map.put("location_name", e.getLocationName());
+        map.put("location_lat", e.getLocationLat());
+        map.put("location_lng", e.getLocationLng());
+        map.put("status", e.getStatus());
+        map.put("display_status", computeDisplayStatus(e));
+        map.put("is_team_activity", e.getTeamActivity());
+        map.put("team_id", e.getTeamId());
+        map.put("created_at", e.getCreatedAt());
+        map.put("updated_at", e.getUpdatedAt());
+        return map;
+    }
+
+    /** 计算前端展示状态 */
+    private String computeDisplayStatus(ActivityEntity entity) {
+        String status = entity.getStatus();
+        if (status == null) return "unknown";
+        return switch (status) {
+            case "draft" -> "draft";
+            case "pending_ai_review", "pending_manual_review" -> "pending_review";
+            case "rejected" -> "rejected";
+            case "published" -> {
+                LocalDateTime now = LocalDateTime.now();
+                if (entity.getEndTime() != null && now.isAfter(entity.getEndTime())) {
+                    yield "ended";
+                } else if (entity.getStartTime() != null && now.isAfter(entity.getStartTime())) {
+                    yield "ongoing";
+                }
+                yield "upcoming";
+            }
+            case "taken_down" -> "taken_down";
+            case "cancelled" -> "cancelled";
+            case "closed" -> "closed";
+            default -> status;
+        };
     }
 }
