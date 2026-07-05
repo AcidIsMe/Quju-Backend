@@ -26,12 +26,25 @@ import java.util.Map;
 @SuppressWarnings("null")
 public class CheckInServiceImpl implements CheckInService {
 
+    private static final int CHECK_IN_REWARD = 2;
+    private static final int NO_SHOW_PENALTY = 5;
+
     private final ActivityMapper activityMapper;
     private final RegistrationMapper registrationMapper;
     private final UserMapper userMapper;
     private final QrCodeGenerator qrCodeGenerator;
     private final MapSdkService mapSdkService;
     private final SquadService squadService;
+
+    /** 调整用户信誉分，不低于 0 */
+    private void adjustCreditScore(String userId, int delta) {
+        if (delta == 0) return;
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) return;
+        int current = user.getCreditScore() != null ? user.getCreditScore() : 100;
+        user.setCreditScore(Math.max(0, current + delta));
+        userMapper.updateById(user);
+    }
 
     @Override
     @Transactional
@@ -65,6 +78,9 @@ public class CheckInServiceImpl implements CheckInService {
         registration.setStatus("checked_in");
         registration.setCheckedInAt(LocalDateTime.now());
         registrationMapper.updateById(registration);
+
+        // 按时签到 +2 信誉分
+        adjustCreditScore(userId, CHECK_IN_REWARD);
 
         // US35: Auto-award points for team activity check-in
         if (Boolean.TRUE.equals(activity.getTeamActivity()) && activity.getTeamId() != null) {
@@ -105,16 +121,21 @@ public class CheckInServiceImpl implements CheckInService {
             registrationMapper.insert(reg);
             activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
             activityMapper.updateById(activity);
+            // 发起人首次签到 +2 信誉分
+            adjustCreditScore(userId, CHECK_IN_REWARD);
         } else if (!"checked_in".equals(reg.getStatus())) {
             reg.setStatus("checked_in");
             reg.setCheckedInAt(LocalDateTime.now());
             registrationMapper.updateById(reg);
+            // 发起人首次签到 +2 信誉分
+            adjustCreditScore(userId, CHECK_IN_REWARD);
         }
 
         return Map.of("qr_code_url", qrCodeGenerator.toDataUri(qrData), "qr_data", qrData, "expires_at", LocalDateTime.now().plusHours(2).toString());
     }
 
     @Override
+    @Transactional
     public Map<String, Object> list(String activityId, String userId) {
         ActivityEntity activity = activityMapper.selectById(activityId);
         if (activity == null) {
@@ -123,6 +144,22 @@ public class CheckInServiceImpl implements CheckInService {
         if (!activity.getCreatorId().equals(userId)) {
             throw new BusinessException(40306, "只有活动发起人才能查看签到列表");
         }
+
+        // 活动已结束且未结算：扣除未签到用户的信誉分
+        if (activity.getEndTime() != null
+                && LocalDateTime.now().isAfter(activity.getEndTime())
+                && !Boolean.TRUE.equals(activity.getCheckInFinalized())) {
+            List<RegistrationEntity> noShows = registrationMapper.selectList(
+                    Wrappers.<RegistrationEntity>lambdaQuery()
+                            .eq(RegistrationEntity::getActivityId, activityId)
+                            .eq(RegistrationEntity::getStatus, "registered"));
+            for (RegistrationEntity noShow : noShows) {
+                adjustCreditScore(noShow.getUserId(), -NO_SHOW_PENALTY);
+            }
+            activity.setCheckInFinalized(true);
+            activityMapper.updateById(activity);
+        }
+
         List<Map<String, Object>> participants = registrationMapper.selectList(Wrappers.<RegistrationEntity>lambdaQuery()
                         .eq(RegistrationEntity::getActivityId, activityId))
                 .stream()

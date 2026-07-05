@@ -200,7 +200,7 @@ public class ActivityServiceImpl implements ActivityService {
     public ActivityEntity cloneActivity(String id, String creatorId) {
         ActivityEntity source = detail(id);
         ActivityEntity target = new ActivityEntity();
-        BeanUtils.copyProperties(source, target, "id", "createdAt", "updatedAt", "currentParticipants", "checkInQrCode");
+        BeanUtils.copyProperties(source, target, "id", "createdAt", "updatedAt", "currentParticipants", "checkInQrCode", "checkInFinalized");
         target.setCreatorId(creatorId);
         target.setStatus("draft");
         target.setCurrentParticipants(0);

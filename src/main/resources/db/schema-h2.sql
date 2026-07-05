@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS activities (
     check_in_qr_code VARCHAR(500),
     check_in_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     check_in_location_required BOOLEAN NOT NULL DEFAULT FALSE,
+    check_in_finalized BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

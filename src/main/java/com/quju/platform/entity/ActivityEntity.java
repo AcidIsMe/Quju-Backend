@@ -48,6 +48,7 @@ public class ActivityEntity {
     private String checkInQrCode;
     private Boolean checkInEnabled;
     private Boolean checkInLocationRequired;
+    private Boolean checkInFinalized;
     /** 与用户的距离（米），由 nearby SQL 动态计算，非数据库列 */
     @TableField(exist = false)
     private BigDecimal distanceMeters;
