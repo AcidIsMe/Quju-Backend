@@ -102,6 +102,67 @@ public class SummaryServiceImpl implements SummaryService {
     }
 
     @Override
+    @Transactional
+    public Map<String, Object> update(String activityId, String userId, String content, List<Map<String, Object>> images) {
+        ActivityEntity activity = activityMapper.selectById(activityId);
+        if (activity == null) {
+            throw new BusinessException(40401, "活动不存在");
+        }
+        if (!userId.equals(activity.getCreatorId())) {
+            throw new BusinessException(40300, "只有活动创建者才能编辑总结");
+        }
+        if (images == null || images.isEmpty()) {
+            throw new BusinessException(40001, "至少上传一张图片");
+        }
+
+        // 查找已有总结
+        ActivitySummaryEntity summary = activitySummaryMapper.selectOne(
+                Wrappers.<ActivitySummaryEntity>lambdaQuery()
+                        .eq(ActivitySummaryEntity::getActivityId, activityId));
+        if (summary == null) {
+            throw new BusinessException(40401, "总结不存在，请先创建");
+        }
+
+        // 更新内容
+        summary.setContent(content);
+        summary.setCreatedAt(LocalDateTime.now());
+        activitySummaryMapper.updateById(summary);
+
+        // 删除旧图片
+        summaryImageMapper.delete(
+                Wrappers.<SummaryImageEntity>lambdaQuery()
+                        .eq(SummaryImageEntity::getSummaryId, summary.getId()));
+
+        // 插入新图片
+        List<Map<String, Object>> savedImages = new ArrayList<>();
+        for (int i = 0; i < images.size(); i++) {
+            Map<String, Object> img = images.get(i);
+            SummaryImageEntity imageEntity = new SummaryImageEntity();
+            imageEntity.setSummaryId(summary.getId());
+            imageEntity.setImageUrl((String) img.getOrDefault("image_url", ""));
+            imageEntity.setCategory((String) img.getOrDefault("category", "process"));
+            imageEntity.setSortOrder((Integer) img.getOrDefault("sort_order", i));
+            imageEntity.setCreatedAt(LocalDateTime.now());
+            summaryImageMapper.insert(imageEntity);
+
+            Map<String, Object> saved = new HashMap<>();
+            saved.put("id", imageEntity.getId());
+            saved.put("image_url", imageEntity.getImageUrl());
+            saved.put("category", imageEntity.getCategory());
+            saved.put("sort_order", imageEntity.getSortOrder());
+            savedImages.add(saved);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", summary.getId());
+        result.put("activity_id", summary.getActivityId());
+        result.put("content", summary.getContent());
+        result.put("images", savedImages);
+        result.put("created_at", summary.getCreatedAt());
+        return result;
+    }
+
+    @Override
     public Map<String, Object> detail(String activityId) {
         ActivitySummaryEntity summary = activitySummaryMapper.selectOne(
                 Wrappers.<ActivitySummaryEntity>lambdaQuery()

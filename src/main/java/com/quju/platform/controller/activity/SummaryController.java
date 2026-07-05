@@ -30,6 +30,19 @@ public class SummaryController {
         ));
     }
 
+    @PutMapping
+    public ApiResponse<Map<String, Object>> update(@PathVariable String activityId,
+                                                   @RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> images = (List<Map<String, Object>>) body.getOrDefault("images", List.of());
+        return ApiResponse.ok(summaryService.update(
+                activityId,
+                SecurityUtil.requireCurrentUserId(),
+                (String) body.getOrDefault("content", ""),
+                images
+        ));
+    }
+
     @GetMapping
     public ApiResponse<Map<String, Object>> detail(@PathVariable String activityId) {
         return ApiResponse.ok(summaryService.detail(activityId));
