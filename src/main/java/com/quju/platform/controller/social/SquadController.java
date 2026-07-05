@@ -4,7 +4,6 @@ import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.dto.social.SquadCreateReq;
 import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.TeamEntity;
-import com.quju.platform.entity.TeamJoinRequestEntity;
 import com.quju.platform.mapper.ImMessageMapper;
 import com.quju.platform.entity.ImMessageEntity;
 import com.quju.platform.mapper.UserMapper;
@@ -99,7 +98,7 @@ public class SquadController {
     }
 
     @GetMapping("/{id}/join-requests")
-    public ApiResponse<List<TeamJoinRequestEntity>> joinRequests(@PathVariable String id) {
+    public ApiResponse<List<Map<String, Object>>> joinRequests(@PathVariable String id) {
         return ApiResponse.ok(squadService.joinRequests(id, SecurityUtil.requireCurrentUserId()));
     }
 

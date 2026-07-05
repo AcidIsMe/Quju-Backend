@@ -3,11 +3,13 @@ package com.quju.platform.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.entity.ActivityEntity;
 import com.quju.platform.entity.RegistrationEntity;
+import com.quju.platform.entity.TeamMemberEntity;
 import com.quju.platform.entity.UserEntity;
 import com.quju.platform.entity.WaitlistEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
 import com.quju.platform.mapper.RegistrationMapper;
+import com.quju.platform.mapper.TeamMemberMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.mapper.WaitlistMapper;
 import com.quju.platform.service.NotificationService;
@@ -32,6 +34,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final UserMapper userMapper;
     private final RegistrationMapper registrationMapper;
     private final WaitlistMapper waitlistMapper;
+    private final TeamMemberMapper teamMemberMapper;
     private final NotificationService notificationService;
     private final SquadService squadService;
 
@@ -70,6 +73,15 @@ public class RegistrationServiceImpl implements RegistrationService {
         }
         if (activity.getCurrentParticipants() >= activity.getMaxParticipants()) {
             throw new BusinessException(40901, "名额已满");
+        }
+        // 小队活动仅限小队成员报名
+        if (Boolean.TRUE.equals(activity.getTeamActivity()) && activity.getTeamId() != null) {
+            Long isMember = teamMemberMapper.selectCount(Wrappers.<TeamMemberEntity>lambdaQuery()
+                    .eq(TeamMemberEntity::getTeamId, activity.getTeamId())
+                    .eq(TeamMemberEntity::getUserId, userId));
+            if (isMember == 0) {
+                throw new BusinessException(40300, "仅小队成员可报名队内活动");
+            }
         }
         // 检查是否有已取消的报名记录，如有则复用（避免唯一键冲突）
         RegistrationEntity registration = registrationMapper.selectOne(Wrappers.<RegistrationEntity>lambdaQuery()
@@ -195,6 +207,16 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .ne(RegistrationEntity::getStatus, "cancelled"));
         if (existingRegistrationCount > 0) {
             throw new BusinessException(40902, "您已报名该活动，无需加入候补");
+        }
+
+        // 小队活动仅限小队成员加入候补
+        if (Boolean.TRUE.equals(activity.getTeamActivity()) && activity.getTeamId() != null) {
+            Long isMember = teamMemberMapper.selectCount(Wrappers.<TeamMemberEntity>lambdaQuery()
+                    .eq(TeamMemberEntity::getTeamId, activity.getTeamId())
+                    .eq(TeamMemberEntity::getUserId, userId));
+            if (isMember == 0) {
+                throw new BusinessException(40300, "仅小队成员可报名队内活动");
+            }
         }
 
         // 计算当前最大排位

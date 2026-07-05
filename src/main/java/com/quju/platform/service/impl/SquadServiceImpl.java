@@ -1,11 +1,13 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.quju.platform.dto.im.ImMessageDto;
 import com.quju.platform.dto.social.SquadCreateReq;
 import com.quju.platform.dto.social.SquadPointsRankResp;
 import com.quju.platform.entity.*;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.*;
+import com.quju.platform.service.ImService;
 import com.quju.platform.service.NotificationService;
 import com.quju.platform.service.SquadService;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class SquadServiceImpl implements SquadService {
     private final GroupChatReadMarkerMapper groupChatReadMarkerMapper;
     private final ImMessageMapper imMessageMapper;
     private final NotificationService notificationService;
+    private final ImService imService;
 
     @Override
     @Transactional
@@ -59,6 +62,9 @@ public class SquadServiceImpl implements SquadService {
 
         // 自动为队长创建群聊已读标记
         ensureChatMarker(team.getId(), leaderId);
+
+        // 在小队群聊中发送欢迎消息
+        sendWelcomeMessage(team.getId(), leaderId, "欢迎来到「" + team.getName() + "」小队！");
 
         return team;
     }
@@ -244,6 +250,37 @@ public class SquadServiceImpl implements SquadService {
                         .eq(ActivityEntity::getTeamActivity, true));
         result.put("activity_count", activityCount);
 
+        // 小队活动列表
+        List<ActivityEntity> teamActivities = activityMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<ActivityEntity>lambdaQuery()
+                        .eq(ActivityEntity::getTeamId, id)
+                        .eq(ActivityEntity::getTeamActivity, true)
+                        .orderByDesc(ActivityEntity::getCreatedAt));
+        List<Map<String, Object>> activityList = new ArrayList<>();
+        for (ActivityEntity a : teamActivities) {
+            Map<String, Object> ai = new LinkedHashMap<>();
+            ai.put("id", a.getId());
+            ai.put("title", a.getTitle());
+            ai.put("description", a.getDescription());
+            ai.put("tags", a.getTags());
+            ai.put("activity_type", a.getActivityType());
+            ai.put("cover_image_url", a.getCoverImageUrl());
+            ai.put("start_time", a.getStartTime());
+            ai.put("end_time", a.getEndTime());
+            ai.put("registration_deadline", a.getRegistrationDeadline());
+            ai.put("max_participants", a.getMaxParticipants());
+            ai.put("current_participants", a.getCurrentParticipants());
+            ai.put("fee_type", a.getFeeType());
+            ai.put("fee_amount", a.getFeeAmount());
+            ai.put("location_name", a.getLocationName());
+            ai.put("location_lat", a.getLocationLat());
+            ai.put("location_lng", a.getLocationLng());
+            ai.put("status", a.getStatus());
+            ai.put("created_at", a.getCreatedAt());
+            activityList.add(ai);
+        }
+        result.put("activities", activityList);
+
         // 成员列表
         List<TeamMemberEntity> memberRecords = teamMemberMapper.selectList(
                 com.baomidou.mybatisplus.core.toolkit.Wrappers.<TeamMemberEntity>lambdaQuery()
@@ -347,6 +384,12 @@ public class SquadServiceImpl implements SquadService {
         ensureChatMarker(id, userId);
         team.setCurrentMembers(team.getCurrentMembers() + 1);
         teamMapper.updateById(team);
+
+        // 在小队群聊中发送欢迎消息
+        UserEntity newMember = userMapper.selectById(userId);
+        String nickname = newMember != null ? newMember.getNickname() : "新成员";
+        sendWelcomeMessage(id, team.getLeaderId(), "欢迎 " + nickname + " 加入「" + team.getName() + "」小队！");
+
         return Map.of("status", "joined");
     }
 
@@ -493,7 +536,7 @@ public class SquadServiceImpl implements SquadService {
     }
 
     @Override
-    public List<TeamJoinRequestEntity> joinRequests(String id, String userId) {
+    public List<Map<String, Object>> joinRequests(String id, String userId) {
         TeamEntity team = detail(id);
         // 只有队长和管理员可以查看
         TeamMemberEntity member = teamMemberMapper.selectOne(Wrappers.<TeamMemberEntity>lambdaQuery()
@@ -502,10 +545,26 @@ public class SquadServiceImpl implements SquadService {
         if (member == null || (!"leader".equals(member.getRole()) && !"admin".equals(member.getRole()))) {
             throw new BusinessException(40300, "只有队长或管理员可以查看入队申请");
         }
-        return teamJoinRequestMapper.selectList(Wrappers.<TeamJoinRequestEntity>lambdaQuery()
-                .eq(TeamJoinRequestEntity::getTeamId, id)
-                .eq(TeamJoinRequestEntity::getStatus, "pending")
-                .orderByDesc(TeamJoinRequestEntity::getCreatedAt));
+        List<TeamJoinRequestEntity> requests = teamJoinRequestMapper.selectList(
+                Wrappers.<TeamJoinRequestEntity>lambdaQuery()
+                        .eq(TeamJoinRequestEntity::getTeamId, id)
+                        .eq(TeamJoinRequestEntity::getStatus, "pending")
+                        .orderByDesc(TeamJoinRequestEntity::getCreatedAt));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TeamJoinRequestEntity req : requests) {
+            UserEntity applicant = userMapper.selectById(req.getUserId());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", req.getId());
+            item.put("team_id", req.getTeamId());
+            item.put("user_id", req.getUserId());
+            item.put("status", req.getStatus());
+            item.put("nickname", applicant != null ? applicant.getNickname() : null);
+            item.put("avatar_url", applicant != null ? applicant.getAvatarUrl() : null);
+            item.put("created_at", req.getCreatedAt());
+            result.add(item);
+        }
+        return result;
     }
 
     @Override
@@ -560,6 +619,11 @@ public class SquadServiceImpl implements SquadService {
                 "您加入小队的申请已被批准",
                 Map.of("team_id", id)
         );
+
+        // 在小队群聊中发送欢迎消息
+        UserEntity applicant = userMapper.selectById(request.getUserId());
+        String applicantNickname = applicant != null ? applicant.getNickname() : "新成员";
+        sendWelcomeMessage(id, team.getLeaderId(), "欢迎 " + applicantNickname + " 加入「" + team.getName() + "」小队！");
     }
 
     @Override
@@ -793,5 +857,21 @@ public class SquadServiceImpl implements SquadService {
         result.put("unread_count", unread);
 
         return result;
+    }
+
+    /**
+     * 在小队群聊中发送一条系统欢迎消息
+     */
+    private void sendWelcomeMessage(String teamId, String senderId, String content) {
+        try {
+            ImMessageDto dto = new ImMessageDto();
+            dto.setEntityType("group");
+            dto.setEntityId("team:" + teamId);
+            dto.setType("text");
+            dto.setContent(content);
+            imService.send(dto, senderId);
+        } catch (Exception e) {
+            // 欢迎消息发送失败不影响主流程
+        }
     }
 }
