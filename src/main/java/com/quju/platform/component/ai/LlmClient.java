@@ -10,7 +10,12 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +24,9 @@ import java.util.Map;
  * 调用 DeepSeek-V3.2 进行：
  * - 内容安全深度审核 (deepReview)
  * - AI 活动策划生成 (generateActivity)
+ * - AI 活动总结生成 (generateSummary)
+ * 调用 Qwen/Qwen3-VL-8B-Instruct 进行：
+ * - 活动照片视觉分析 (analyzeImages)
  */
 @Component
 public class LlmClient {
@@ -279,6 +287,245 @@ public class LlmClient {
         if (node.has(field) && !node.get(field).isNull()) {
             String text = node.get(field).asText();
             return (text == null || text.isBlank()) ? null : text;
+        }
+        return null;
+    }
+
+    private static final String VISION_MODEL = "Qwen/Qwen3-VL-8B-Instruct";
+
+    /**
+     * 调用 Qwen/Qwen3-VL-8B-Instruct 视觉模型分析活动照片
+     * 支持远程 URL 和本地相对路径（自动转为 base64 data URI）
+     *
+     * @param imageUrls 照片 URL 列表（可为完整 http(s) 地址或 /uploads/ 相对路径）
+     * @return 图片内容描述文本，异常时返回 null
+     */
+    public String analyzeImages(List<String> imageUrls) {
+        var aiConfig = qujuProperties.getAi().getSiliconflow();
+        String apiKey = aiConfig.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("SiliconFlow API Key 未配置，无法分析图片");
+            return null;
+        }
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return null;
+        }
+
+        String uploadDir = qujuProperties.getFiles().getUploadDir();
+        Path uploadBasePath = Paths.get(uploadDir).toAbsolutePath();
+
+        // 构建多模态消息内容
+        List<Map<String, Object>> contentParts = new ArrayList<>();
+        contentParts.add(Map.of("type", "text", "text",
+                "请逐一描述以下活动照片的内容，包括：场景类型（合影/场地/活动过程/物资/成果）、画面中的人物活动、氛围感受。请用简洁的中文描述，每张照片1-2句话。"));
+
+        for (String imageUrl : imageUrls) {
+            String resolvedUrl = resolveImageForVision(imageUrl, uploadBasePath);
+            if (resolvedUrl != null) {
+                contentParts.add(Map.of(
+                        "type", "image_url",
+                        "image_url", Map.of("url", resolvedUrl)
+                ));
+            }
+        }
+
+        if (contentParts.size() <= 1) {
+            log.warn("没有可分析的图片");
+            return null;
+        }
+
+        Map<String, Object> requestBody = Map.of(
+                "model", VISION_MODEL,
+                "messages", List.of(
+                        Map.of("role", "user", "content", contentParts)
+                ),
+                "temperature", 0.3,
+                "max_tokens", 600
+        );
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+            headers.set("Connection", "keep-alive");
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<JsonNode> response = restTemplate.exchange(
+                    aiConfig.getBaseUrl() + "/chat/completions",
+                    HttpMethod.POST,
+                    entity,
+                    JsonNode.class
+            );
+
+            String result = parsePlainTextResult(response.getBody());
+            if (result != null) {
+                log.info("视觉模型图片分析成功，{} 张图片 -> {} 字", imageUrls.size(), result.length());
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("视觉模型图片分析失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 解析图片地址供视觉模型使用：
+     * - 远程 http(s) URL → 直接返回
+     * - /uploads/ 本地相对路径 → 读取文件转 base64 data URI
+     * - 其他 → null
+     */
+    private String resolveImageForVision(String imageUrl, Path uploadBasePath) {
+        if (imageUrl == null || imageUrl.isBlank()) return null;
+
+        // 已是远程 URL，直接使用
+        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+            return imageUrl;
+        }
+
+        // 本地相对路径，读取文件转 base64
+        try {
+            // 去掉开头的 /uploads/ 前缀，拼接到实际存储目录
+            String relativePath = imageUrl;
+            if (relativePath.startsWith("/")) {
+                relativePath = relativePath.substring(1); // 去掉开头的 /
+            }
+            // 如果路径以 uploads/ 开头，去掉它（因为 uploadBasePath 已经指向 uploads 目录）
+            if (relativePath.startsWith("uploads/")) {
+                relativePath = relativePath.substring("uploads/".length());
+            }
+
+            Path filePath = uploadBasePath.resolve(relativePath);
+            if (!Files.exists(filePath)) {
+                log.warn("图片文件不存在: {}", filePath);
+                return null;
+            }
+
+            byte[] bytes = Files.readAllBytes(filePath);
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+
+            // 根据文件扩展名确定 MIME 类型
+            String fileName = filePath.getFileName().toString().toLowerCase();
+            String mimeType = "image/jpeg";
+            if (fileName.endsWith(".png")) {
+                mimeType = "image/png";
+            } else if (fileName.endsWith(".gif")) {
+                mimeType = "image/gif";
+            } else if (fileName.endsWith(".webp")) {
+                mimeType = "image/webp";
+            } else if (fileName.endsWith(".bmp")) {
+                mimeType = "image/bmp";
+            }
+
+            return "data:" + mimeType + ";base64," + base64;
+        } catch (IOException e) {
+            log.warn("读取图片文件失败: {}", imageUrl, e);
+            return null;
+        }
+    }
+
+    /**
+     * 调用 DeepSeek-V3.2 根据活动信息 + 图片分析生成活动总结
+     *
+     * @param activityDescription 活动描述
+     * @param checkInCount        签到人数
+     * @param totalRegistrations  总报名人数
+     * @param reviewsText         用户评价汇总文本
+     * @param imageAnalysis       图片视觉分析结果（可为 null）
+     * @return AI 生成的活动总结文本，异常时返回 null
+     */
+    public String generateSummary(String activityDescription, int checkInCount, int totalRegistrations,
+                                  String reviewsText, String imageAnalysis) {
+        var aiConfig = qujuProperties.getAi().getSiliconflow();
+        String apiKey = aiConfig.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("SiliconFlow API Key 未配置，无法生成 AI 活动总结");
+            return null;
+        }
+
+        String prompt = buildSummaryPrompt(activityDescription, checkInCount, totalRegistrations, reviewsText, imageAnalysis);
+
+        Map<String, Object> requestBody = Map.of(
+                "model", aiConfig.getModel(),
+                "messages", List.of(
+                        Map.of("role", "system", "content", "你是一个活动总结撰写助手。请根据提供的活动信息和照片描述，撰写一份生动有趣的活动总结回顾。"),
+                        Map.of("role", "user", "content", prompt)
+                ),
+                "temperature", 0.7,
+                "max_tokens", 500
+        );
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<JsonNode> response = restTemplate.exchange(
+                    aiConfig.getBaseUrl() + "/chat/completions",
+                    HttpMethod.POST,
+                    entity,
+                    JsonNode.class
+            );
+
+            return parsePlainTextResult(response.getBody());
+        } catch (Exception e) {
+            log.error("LLM 活动总结生成失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 兼容旧接口（无图片分析），委托到新方法
+     */
+    public String generateSummary(String activityDescription, int checkInCount, int totalRegistrations, String reviewsText) {
+        return generateSummary(activityDescription, checkInCount, totalRegistrations, reviewsText, null);
+    }
+
+    /**
+     * 构建 AI 活动总结的 prompt（含可选图片分析）
+     */
+    private String buildSummaryPrompt(String activityDescription, int checkInCount, int totalRegistrations,
+                                      String reviewsText, String imageAnalysis) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("请根据以下活动信息，撰写一份活动总结回顾。\n\n");
+        sb.append("活动描述：").append(activityDescription).append("\n");
+        sb.append("签到人数：").append(checkInCount).append(" 人（共 ").append(totalRegistrations).append(" 人报名）\n");
+        sb.append("用户评价：\n").append(reviewsText).append("\n");
+
+        if (imageAnalysis != null && !imageAnalysis.isBlank()) {
+            sb.append("现场照片描述（由视觉AI分析）：\n").append(imageAnalysis).append("\n");
+        }
+
+        sb.append("""
+                请撰写一份生动有趣、有温度的活动总结，要求：
+                1. 开头简要回顾活动的亮点和整体氛围
+                2. 中间总结活动的参与情况（签到率、参与度等）
+                3. 结合用户评价中的反馈和照片中的场景，提炼活动的亮点和改进建议
+                4. 结尾表达感谢和期待
+                5. 严格控制在 150-250 字，不得超出
+                6. 语气亲切自然，适合发布在社交平台
+
+                请直接输出总结文本，不需要 JSON 格式，不需要标题。
+                """);
+        return sb.toString();
+    }
+
+    /**
+     * 解析 LLM 返回的纯文本结果
+     */
+    private String parsePlainTextResult(JsonNode body) {
+        if (body == null) return null;
+
+        try {
+            String content = body.get("choices").get(0).get("message").get("content").asText();
+            if (content != null && !content.isBlank()) {
+                log.info("LLM 生成成功，长度: {} 字", content.length());
+                return content.trim();
+            }
+        } catch (Exception e) {
+            log.warn("解析 LLM 结果失败", e);
         }
         return null;
     }

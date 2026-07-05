@@ -461,6 +461,17 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- 迭代2：activities 增加 check_in_finalized 字段
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'activities' AND column_name = 'check_in_finalized') = 0,
+    'ALTER TABLE activities ADD COLUMN check_in_finalized BOOLEAN NOT NULL DEFAULT FALSE AFTER check_in_location_required',
+    'SELECT ''check_in_finalized already exists'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 -- 迭代2：team_members 增加积分字段
 SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.columns
