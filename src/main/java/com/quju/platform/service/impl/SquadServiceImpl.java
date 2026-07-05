@@ -673,6 +673,7 @@ public class SquadServiceImpl implements SquadService {
                     return SquadPointsRankResp.builder()
                             .userId(m.getUserId())
                             .nickname(user != null ? user.getNickname() : "未知")
+                            .avatarUrl(user != null ? user.getAvatarUrl() : null)
                             .points(m.getPoints() == null ? 0 : m.getPoints())
                             .rank(rank.getAndIncrement())
                             .build();

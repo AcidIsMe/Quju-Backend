@@ -198,6 +198,18 @@ CREATE TABLE IF NOT EXISTS team_join_requests (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS team_moments (
+    id VARCHAR(36) PRIMARY KEY,
+    team_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    content TEXT,
+    image_url VARCHAR(500),
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
+    featured_by VARCHAR(36),
+    featured_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS team_blacklist (
     team_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
