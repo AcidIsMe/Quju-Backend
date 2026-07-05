@@ -272,6 +272,21 @@ CREATE TABLE IF NOT EXISTS team_photos (
     INDEX idx_team_photos_team (team_id, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 小队动态
+CREATE TABLE IF NOT EXISTS team_moments (
+    id VARCHAR(36) PRIMARY KEY,
+    team_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    content TEXT,
+    image_url VARCHAR(500),
+    featured TINYINT(1) NOT NULL DEFAULT 0,
+    featured_by VARCHAR(36),
+    featured_at DATETIME(3),
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_team_moments_team_id (team_id),
+    INDEX idx_team_moments_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 小队投票
 CREATE TABLE IF NOT EXISTS team_polls (
     id VARCHAR(36) PRIMARY KEY,
@@ -400,6 +415,34 @@ WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_hiking');
 INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
 SELECT 'tpl_board_game', '桌游聚会', '桌游聚会', '适合破冰和新朋友交流的桌游局', JSON_ARRAY('桌游','聚会'), '桌游聚会', 180, 12, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_board_game');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_badminton', '羽毛球两小时', '运动健身', '两小时羽毛球双打局，自带球拍，场地费AA', JSON_ARRAY('羽毛球','运动','周末'), '运动健身', 120, 16, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_badminton');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_dinner', '周末聚餐', '聚餐美食', '选定一家口碑餐厅，边吃边聊，费用AA', JSON_ARRAY('美食','聚餐','周末'), '聚餐美食', 120, 10, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_dinner');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_study_group', '读书分享会', '学习交流', '每人分享一本最近在读的书，自由讨论交流心得', JSON_ARRAY('读书','分享','学习'), '学习交流', 150, 15, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_study_group');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_volunteer', '社区公益行', '公益活动', '参与社区志愿服务，清理公共空间或探访老人', JSON_ARRAY('公益','志愿','社区'), '公益活动', 180, 20, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_volunteer');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_city_walk', '城市漫步打卡', '城市探索', '沿一条精选路线步行探索，打卡隐藏小店和街景', JSON_ARRAY('城市','步行','打卡'), '城市探索', 150, 15, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_city_walk');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_yoga', '晨间公园瑜伽', '运动健身', '清晨公园草坪瑜伽练习，适合所有水平', JSON_ARRAY('瑜伽','健身','清晨'), '运动健身', 60, 12, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_yoga');
+
+INSERT INTO activity_templates (id, name, category, description, tags, activity_type, preset_duration_minutes, preset_max_participants, is_system)
+SELECT 'tpl_photography', '主题摄影外拍', '城市探索', '围绕一个主题进行户外拍摄，结束后互相点评作品', JSON_ARRAY('摄影','户外','创作'), '城市探索', 180, 10, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM activity_templates WHERE id = 'tpl_photography');
 
 SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.columns
