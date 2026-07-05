@@ -77,6 +77,7 @@ public class CheckInServiceImpl implements CheckInService {
     }
 
     @Override
+    @Transactional
     public Map<String, Object> qrcode(String activityId, String userId) {
         ActivityEntity activity = activityMapper.selectById(activityId);
         if (activity == null) {
@@ -89,6 +90,27 @@ public class CheckInServiceImpl implements CheckInService {
         activity.setCheckInQrCode(qrData);
         activity.setCheckInEnabled(true);
         activityMapper.updateById(activity);
+
+        // 发起人打开签到二维码即自动签到（无需扫码）
+        RegistrationEntity reg = registrationMapper.selectOne(Wrappers.<RegistrationEntity>lambdaQuery()
+                .eq(RegistrationEntity::getActivityId, activityId)
+                .eq(RegistrationEntity::getUserId, userId)
+                .ne(RegistrationEntity::getStatus, "cancelled"));
+        if (reg == null) {
+            reg = new RegistrationEntity();
+            reg.setActivityId(activityId);
+            reg.setUserId(userId);
+            reg.setStatus("checked_in");
+            reg.setCheckedInAt(LocalDateTime.now());
+            registrationMapper.insert(reg);
+            activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
+            activityMapper.updateById(activity);
+        } else if (!"checked_in".equals(reg.getStatus())) {
+            reg.setStatus("checked_in");
+            reg.setCheckedInAt(LocalDateTime.now());
+            registrationMapper.updateById(reg);
+        }
+
         return Map.of("qr_code_url", qrCodeGenerator.toDataUri(qrData), "qr_data", qrData, "expires_at", LocalDateTime.now().plusHours(2).toString());
     }
 

@@ -1,22 +1,28 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.quju.platform.component.websocket.ImWebSocketServer;
 import com.quju.platform.entity.NotificationEntity;
 import com.quju.platform.mapper.NotificationMapper;
 import com.quju.platform.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
+@Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationMapper notificationMapper;
+    private final ImWebSocketServer imWebSocketServer;
 
     @Override
     public void notify(String userId, String type, String title, String content, Map<String, Object> metadata) {
@@ -27,7 +33,28 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setContent(content);
         notification.setRead(false);
         notification.setMetadata(metadata);
+        notification.setCreatedAt(LocalDateTime.now());
         notificationMapper.insert(notification);
+
+        // 通过 WebSocket 实时推送给用户
+        try {
+            Map<String, Object> pushPayload = new LinkedHashMap<>();
+            pushPayload.put("type", "new_notification");
+            pushPayload.put("data", Map.of(
+                    "id", notification.getId(),
+                    "type", type,
+                    "title", title,
+                    "content", content,
+                    "is_read", false,
+                    "created_at", notification.getCreatedAt() != null
+                            ? notification.getCreatedAt().toString() : "",
+                    "metadata", metadata != null ? metadata : Map.of()
+            ));
+            imWebSocketServer.pushToUser(userId, pushPayload);
+        } catch (Exception e) {
+            log.warn("WebSocket 推送通知失败: userId={}, type={}, error={}",
+                    userId, type, e.getMessage());
+        }
     }
 
     @Override
@@ -84,13 +111,11 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void readAll(String userId) {
-        java.util.List<NotificationEntity> unread = notificationMapper.selectList(
-                Wrappers.<NotificationEntity>lambdaQuery()
+        NotificationEntity template = new NotificationEntity();
+        template.setRead(true);
+        notificationMapper.update(template,
+                Wrappers.<NotificationEntity>lambdaUpdate()
                         .eq(NotificationEntity::getUserId, userId)
                         .eq(NotificationEntity::getRead, false));
-        for (NotificationEntity n : unread) {
-            n.setRead(true);
-            notificationMapper.updateById(n);
-        }
     }
 }

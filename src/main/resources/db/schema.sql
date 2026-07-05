@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     activity_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     content TEXT NOT NULL,
+    rating TINYINT UNSIGNED DEFAULT NULL COMMENT '评分 1-5',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     UNIQUE KEY uk_review_activity_user (activity_id, user_id),
     INDEX idx_reviews_activity_created (activity_id, created_at)

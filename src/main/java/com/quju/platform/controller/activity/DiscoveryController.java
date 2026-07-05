@@ -1,6 +1,7 @@
 package com.quju.platform.controller.activity;
 
 import com.quju.platform.dto.activity.ActivityQueryReq;
+import com.quju.platform.dto.activity.HomeStatsDTO;
 import com.quju.platform.dto.common.ApiResponse;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.entity.ActivityEntity;
@@ -63,6 +64,11 @@ public class DiscoveryController {
         // AC5: 既无边界框也无位置 → 提示需要位置权限（由 service 层抛出 40010）
         CursorPage<ActivityEntity> page = discoveryService.nearby(req);
         return ApiResponse.page(page.getItems(), paginationMap(page));
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<HomeStatsDTO> homeStats() {
+        return ApiResponse.ok(discoveryService.getHomeStats());
     }
 
     @GetMapping("/teams")

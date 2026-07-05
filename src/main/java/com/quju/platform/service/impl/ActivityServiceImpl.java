@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.component.ai.CmsClient;
 import com.quju.platform.component.statemachine.ActivityStateMachine;
 import com.quju.platform.dto.activity.ActivityCreateReq;
+import com.quju.platform.dto.im.ImMessageDto;
 import com.quju.platform.entity.ActivityEntity;
 import com.quju.platform.entity.RegistrationEntity;
 import com.quju.platform.entity.TeamMemberEntity;
@@ -15,6 +16,7 @@ import com.quju.platform.mapper.TeamMapper;
 import com.quju.platform.mapper.TeamMemberMapper;
 import com.quju.platform.mapper.UserMapper;
 import com.quju.platform.service.ActivityService;
+import com.quju.platform.service.ImService;
 import com.quju.platform.service.NotificationService;
 import com.quju.platform.util.GeoJsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ public class ActivityServiceImpl implements ActivityService {
     private final NotificationService notificationService;
     private final TeamMapper teamMapper;
     private final TeamMemberMapper teamMemberMapper;
+    private final ImService imService;
 
     @Override
     public ActivityEntity create(ActivityCreateReq req, String creatorId) {
@@ -243,6 +247,7 @@ public class ActivityServiceImpl implements ActivityService {
         ActivityEntity entity = detail(id);
         entity.setStatus(stateMachine.submitForReview(entity.getStatus(), entity.getMaxParticipants()));
         activityMapper.updateById(entity);
+        processAiReview(entity);
         return entity;
     }
 
@@ -300,6 +305,12 @@ public class ActivityServiceImpl implements ActivityService {
             notificationService.notify(entity.getCreatorId(), "activity_review",
                     notifyTitle, notifyContent, Map.of("activity_id", entity.getId()));
         }
+        // 队内活动审核通过发布后，自动推送通知到小队群聊
+        if ("published".equals(newStatus)
+                && Boolean.TRUE.equals(entity.getTeamActivity())
+                && entity.getTeamId() != null) {
+            sendTeamActivityNotification(entity);
+        }
     }
 
     private void fill(ActivityEntity entity, ActivityCreateReq req) {
@@ -336,18 +347,50 @@ public class ActivityServiceImpl implements ActivityService {
 
     private void validateActivity(ActivityCreateReq req) {
         if (req.getStartTime() != null && req.getEndTime() != null && !req.getStartTime().isBefore(req.getEndTime())) {
-            throw new BusinessException(40011, "start_time must be before end_time");
+            throw new BusinessException(40011, "结束时间必须晚于开始时间");
         }
         String feeType = req.getFeeType() == null || req.getFeeType().isBlank() ? "free" : req.getFeeType();
         BigDecimal feeAmount = req.getFeeAmount() == null ? BigDecimal.ZERO : req.getFeeAmount();
         if (!"free".equals(feeType) && !"paid".equals(feeType)) {
-            throw new BusinessException(40012, "fee_type must be free or paid");
+            throw new BusinessException(40012, "费用类型只能是免费或付费");
         }
         if (feeAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException(40013, "fee_amount must be greater than or equal to 0");
+            throw new BusinessException(40013, "费用金额不能为负数");
         }
         if ("free".equals(feeType) && feeAmount.compareTo(BigDecimal.ZERO) != 0) {
-            throw new BusinessException(40014, "fee_amount must be 0 when fee_type is free");
+            throw new BusinessException(40014, "免费活动的费用金额必须为0");
+        }
+    }
+
+    /**
+     * 队内活动发布成功后，自动推送通知到小队群聊
+     */
+    private void sendTeamActivityNotification(ActivityEntity activity) {
+        try {
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+            StringBuilder content = new StringBuilder();
+            content.append("\uD83D\uDCE2 新队内活动：\u300C").append(activity.getTitle()).append("\u300D\n");
+            content.append("类型：").append(activity.getActivityType() != null ? activity.getActivityType() : "未指定").append("\n");
+            if (activity.getStartTime() != null && activity.getEndTime() != null) {
+                content.append("时间：").append(activity.getStartTime().format(fmt))
+                        .append(" ~ ").append(activity.getEndTime().format(fmt)).append("\n");
+            }
+            if (activity.getLocationName() != null && !activity.getLocationName().isBlank()) {
+                content.append("地点：").append(activity.getLocationName()).append("\n");
+            }
+            content.append("人数上限：").append(activity.getMaxParticipants()).append("人\n");
+            content.append("费用：").append("paid".equals(activity.getFeeType()) ? activity.getFeeAmount() + "元" : "免费").append("\n");
+            content.append("点击报名参与～");
+
+            ImMessageDto dto = new ImMessageDto();
+            dto.setEntityType("group");
+            dto.setEntityId("team:" + activity.getTeamId());
+            dto.setType("text");
+            dto.setContent(content.toString());
+            dto.setMentionAll(true);
+            imService.send(dto, activity.getCreatorId());
+        } catch (Exception e) {
+            // 群聊通知发送失败不影响活动创建主流程
         }
     }
 }

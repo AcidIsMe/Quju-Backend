@@ -15,5 +15,6 @@ public class ReviewEntity {
     private String activityId;
     private String userId;
     private String content;
+    private Integer rating;
     private LocalDateTime createdAt;
 }

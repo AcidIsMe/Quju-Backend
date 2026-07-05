@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     activity_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     content TEXT NOT NULL,
+    rating TINYINT DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (activity_id, user_id)
 );

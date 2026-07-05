@@ -21,9 +21,10 @@ public class ReviewController {
 
     @PostMapping
     public ApiResponse<ReviewEntity> create(@PathVariable String activityId,
-                                            @RequestBody Map<String, String> body) {
-        String content = body.get("content");
-        return ApiResponse.ok(reviewService.create(activityId, SecurityUtil.requireCurrentUserId(), content));
+                                            @RequestBody Map<String, Object> body) {
+        String content = (String) body.get("content");
+        Integer rating = body.get("rating") != null ? ((Number) body.get("rating")).intValue() : null;
+        return ApiResponse.ok(reviewService.create(activityId, SecurityUtil.requireCurrentUserId(), content, rating));
     }
 
     @GetMapping

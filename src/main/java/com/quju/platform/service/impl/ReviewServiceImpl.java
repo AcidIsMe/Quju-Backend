@@ -32,7 +32,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final UserMapper userMapper;
 
     @Override
-    public ReviewEntity create(String activityId, String userId, String content) {
+    public ReviewEntity create(String activityId, String userId, String content, Integer rating) {
         // 校验内容不能为空
         if (content == null || content.isBlank()) {
             throw new BusinessException(40015, "评价内容不能为空");
@@ -72,6 +72,7 @@ public class ReviewServiceImpl implements ReviewService {
         review.setActivityId(activityId);
         review.setUserId(userId);
         review.setContent(content);
+        review.setRating(rating);
         review.setCreatedAt(LocalDateTime.now());
         reviewMapper.insert(review);
         return review;
@@ -101,6 +102,7 @@ public class ReviewServiceImpl implements ReviewService {
             map.put("activity_id", review.getActivityId());
             map.put("user_id", review.getUserId());
             map.put("content", review.getContent());
+            map.put("rating", review.getRating());
             map.put("created_at", review.getCreatedAt() != null
                     ? review.getCreatedAt().toString() : null);
 

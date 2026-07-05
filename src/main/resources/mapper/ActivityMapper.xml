@@ -81,4 +81,13 @@
         ORDER BY start_time ASC
         LIMIT #{limit}
     </select>
+
+    <select id="getHomeStatsRaw" resultType="java.util.HashMap">
+        SELECT
+            COUNT(*) AS featured_count,
+            COALESCE(SUM(GREATEST(max_participants - current_participants, 0)), 0) AS available_slots
+        FROM activities
+        WHERE status = 'published'
+          AND end_time >= NOW()
+    </select>
 </mapper>

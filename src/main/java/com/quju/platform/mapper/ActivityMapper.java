@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 public interface ActivityMapper extends BaseMapper<ActivityEntity> {
 
@@ -33,4 +34,7 @@ public interface ActivityMapper extends BaseMapper<ActivityEntity> {
                                       @Param("lat") BigDecimal lat,
                                       @Param("lng") BigDecimal lng,
                                       @Param("limit") Integer limit);
+
+    /** 首页统计：精选活动数（已发布且未结束）、可报名名额总数 */
+    Map<String, Object> getHomeStatsRaw();
 }

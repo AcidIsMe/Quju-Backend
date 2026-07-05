@@ -3,11 +3,14 @@ package com.quju.platform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.quju.platform.dto.activity.ActivityQueryReq;
+import com.quju.platform.dto.activity.HomeStatsDTO;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.entity.ActivityEntity;
+import com.quju.platform.entity.ReviewEntity;
 import com.quju.platform.entity.TeamEntity;
 import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.ActivityMapper;
+import com.quju.platform.mapper.ReviewMapper;
 import com.quju.platform.mapper.TeamMapper;
 import com.quju.platform.service.DiscoveryService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +28,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     private final ActivityMapper activityMapper;
     private final TeamMapper teamMapper;
+    private final ReviewMapper reviewMapper;
 
     @Override
     public CursorPage<ActivityEntity> latest(ActivityQueryReq req) {
@@ -118,6 +123,29 @@ public class DiscoveryServiceImpl implements DiscoveryService {
             LocalDateTime t = e.getStartTime();
             return (t == null ? LocalDateTime.now() : t) + "|" + e.getId();
         });
+    }
+
+    @Override
+    public HomeStatsDTO getHomeStats() {
+        Map<String, Object> raw = activityMapper.getHomeStatsRaw();
+        int featuredCount = ((Number) raw.getOrDefault("featured_count", 0)).intValue();
+        int availableSlots = ((Number) raw.getOrDefault("available_slots", 0)).intValue();
+
+        double avgRating = 0.0;
+        try {
+            avgRating = reviewMapper.selectList(
+                Wrappers.<ReviewEntity>lambdaQuery()
+                    .isNotNull(ReviewEntity::getRating)
+            ).stream()
+                .filter(r -> r.getRating() != null)
+                .mapToInt(ReviewEntity::getRating)
+                .average()
+                .orElse(0.0);
+        } catch (Exception e) {
+            // rating 列可能尚未迁移，忽略并返回 0
+        }
+
+        return new HomeStatsDTO(featuredCount, availableSlots, Math.round(avgRating * 10.0) / 10.0);
     }
 
     private void applyCursorDesc(LambdaQueryWrapper<ActivityEntity> wrapper, String cursor) {

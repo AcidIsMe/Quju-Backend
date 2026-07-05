@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -20,6 +21,7 @@ public class NotificationEntity {
     private String title;
     private String content;
     @TableField("is_read")
+    @JsonProperty("is_read")
     private Boolean read;
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> metadata;

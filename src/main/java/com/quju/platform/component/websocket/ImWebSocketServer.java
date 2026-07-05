@@ -208,6 +208,19 @@ public class ImWebSocketServer extends TextWebSocketHandler {
     }
 
     /**
+     * 推送系统通知给指定用户（供 NotificationService 等调用）
+     */
+    public void pushToUser(String userId, Map<String, Object> payload) {
+        if (userId == null || payload == null) return;
+        try {
+            String json = objectMapper.writeValueAsString(payload);
+            sendToUser(userId, json);
+        } catch (Exception e) {
+            log.warn("推送通知给用户 {} 失败: {}", userId, e.getMessage());
+        }
+    }
+
+    /**
      * 广播消息给群聊中除发送方外的所有在线成员（用于 typing 等瞬时状态）
      */
     private void broadcastToGroupExcludeSender(String entityId, String senderId, String message) {
