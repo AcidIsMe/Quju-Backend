@@ -1,6 +1,8 @@
 package com.quju.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.quju.platform.component.websocket.SessionManager;
 import com.quju.platform.dto.common.CursorPage;
 import com.quju.platform.dto.im.ImMessageDto;
 import com.quju.platform.entity.*;
@@ -8,17 +10,22 @@ import com.quju.platform.exception.BusinessException;
 import com.quju.platform.mapper.*;
 import com.quju.platform.service.ImService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
 public class ImServiceImpl implements ImService {
+
+    private static final Logger log = LoggerFactory.getLogger(ImServiceImpl.class);
 
     private final ImMessageMapper imMessageMapper;
     private final FriendshipMapper friendshipMapper;
@@ -26,6 +33,8 @@ public class ImServiceImpl implements ImService {
     private final TeamMapper teamMapper;
     private final TeamMemberMapper teamMemberMapper;
     private final GroupChatReadMarkerMapper groupChatReadMarkerMapper;
+    private final SessionManager sessionManager;
+    private final ObjectMapper objectMapper;
 
     @Override
     public ImMessageEntity send(ImMessageDto dto, String senderId) {
@@ -65,6 +74,7 @@ public class ImServiceImpl implements ImService {
             }
         }
 
+        // 保存消息
         ImMessageEntity entity = new ImMessageEntity();
         entity.setEntityType(dto.getEntityType());
         entity.setEntityId(dto.getEntityId());
@@ -74,7 +84,73 @@ public class ImServiceImpl implements ImService {
         entity.setMetadata(dto.getMetadata());
         entity.setRecalled(false);
         imMessageMapper.insert(entity);
+
+        // 构建广播消息
+        Map<String, Object> broadcast = new LinkedHashMap<>();
+        broadcast.put("type", "new_message");
+        broadcast.put("message_id", entity.getId());
+        broadcast.put("entity_type", entity.getEntityType());
+        broadcast.put("entity_id", entity.getEntityId());
+        broadcast.put("sender_id", senderId);
+        broadcast.put("content", entity.getContent());
+        broadcast.put("created_at", entity.getCreatedAt() != null ? entity.getCreatedAt().toString() : "");
+
+        // WebSocket 推送
+        pushToRecipients(entity.getEntityType(), entity.getEntityId(), senderId, broadcast);
+
         return entity;
+    }
+
+    /**
+     * 将新消息推送给对应会话的所有接收方
+     */
+    private void pushToRecipients(String entityType, String entityId, String senderId,
+                                  Map<String, Object> broadcast) {
+        try {
+            String broadcastJson = objectMapper.writeValueAsString(broadcast);
+            Set<String> targetUserIds = resolveTargetUserIds(entityType, entityId, senderId);
+            for (String userId : targetUserIds) {
+                sendToUser(userId, broadcastJson);
+            }
+        } catch (Exception e) {
+            log.error("推送消息失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 解析消息的目标用户ID列表
+     */
+    private Set<String> resolveTargetUserIds(String entityType, String entityId, String senderId) {
+        Set<String> userIds = new LinkedHashSet<>();
+        userIds.add(senderId); // 始终包含发送方（多设备同步）
+
+        if ("private".equals(entityType)) {
+            String[] parts = entityId.split(":");
+            if (parts.length == 2) {
+                String otherUserId = parts[0].equals(senderId) ? parts[1] : parts[0];
+                userIds.add(otherUserId);
+            }
+        } else if ("group".equals(entityType)) {
+            String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
+            List<TeamMemberEntity> members = teamMemberMapper.selectList(
+                    Wrappers.<TeamMemberEntity>lambdaQuery()
+                            .eq(TeamMemberEntity::getTeamId, groupId));
+            for (TeamMemberEntity m : members) {
+                userIds.add(m.getUserId());
+            }
+        }
+        return userIds;
+    }
+
+    private void sendToUser(String userId, String message) {
+        WebSocketSession session = sessionManager.get(userId);
+        if (session != null && session.isOpen()) {
+            try {
+                session.sendMessage(new TextMessage(message));
+            } catch (Exception e) {
+                log.warn("发送消息给用户 {} 失败: {}", userId, e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -96,6 +172,15 @@ public class ImServiceImpl implements ImService {
         entity.setRecalled(true);
         entity.setRecalledAt(LocalDateTime.now());
         imMessageMapper.updateById(entity);
+
+        // 推送撤回通知
+        Map<String, Object> recallMsg = new LinkedHashMap<>();
+        recallMsg.put("type", "message_recalled");
+        recallMsg.put("message_id", messageId);
+        recallMsg.put("entity_type", entity.getEntityType());
+        recallMsg.put("entity_id", entity.getEntityId());
+        recallMsg.put("sender_id", userId);
+        pushToRecipients(entity.getEntityType(), entity.getEntityId(), userId, recallMsg);
     }
 
     @Override
@@ -127,7 +212,6 @@ public class ImServiceImpl implements ImService {
                 .and(w -> w.like(ImMessageEntity::getEntityId, "%" + userId + "%"))
                 .orderByDesc(ImMessageEntity::getCreatedAt));
 
-        // 按 entity_id 分组，取每组最新消息
         Map<String, ImMessageEntity> latestPrivate = new LinkedHashMap<>();
         Set<String> seenPrivate = new HashSet<>();
         for (ImMessageEntity msg : privateMessages) {
@@ -167,7 +251,6 @@ public class ImServiceImpl implements ImService {
         }
 
         // ======== 2. 群聊会话 ========
-        // 查询用户加入的所有活跃小队
         List<TeamMemberEntity> myTeams = teamMemberMapper.selectList(Wrappers.<TeamMemberEntity>lambdaQuery()
                 .eq(TeamMemberEntity::getUserId, userId));
 
@@ -176,7 +259,6 @@ public class ImServiceImpl implements ImService {
             TeamEntity team = teamMapper.selectById(myTeam.getTeamId());
             if (team == null || !"active".equals(team.getStatus())) continue;
 
-            // 取该群聊最新一条消息
             List<ImMessageEntity> groupMsgs = imMessageMapper.selectList(Wrappers.<ImMessageEntity>lambdaQuery()
                     .eq(ImMessageEntity::getEntityType, "group")
                     .eq(ImMessageEntity::getEntityId, groupEntityId)
@@ -203,7 +285,6 @@ public class ImServiceImpl implements ImService {
             result.add(conv);
         }
 
-        // 按最后消息时间倒序
         result.sort((a, b) -> ((String) b.get("last_message_time")).compareTo((String) a.get("last_message_time")));
         return result;
     }
@@ -211,7 +292,6 @@ public class ImServiceImpl implements ImService {
     @Override
     public void markRead(String entityType, String entityId, String userId) {
         if ("group".equals(entityType)) {
-            // 群聊：更新已读标记
             String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
             GroupChatReadMarkerEntity marker = groupChatReadMarkerMapper.selectOne(
                     Wrappers.<GroupChatReadMarkerEntity>lambdaQuery()
@@ -229,7 +309,6 @@ public class ImServiceImpl implements ImService {
                 groupChatReadMarkerMapper.updateById(marker);
             }
         } else {
-            // 私聊：将对方发送的未读消息标记为已读
             List<ImMessageEntity> unreadMessages = imMessageMapper.selectList(Wrappers.<ImMessageEntity>lambdaQuery()
                     .eq(ImMessageEntity::getEntityType, entityType)
                     .eq(ImMessageEntity::getEntityId, entityId)
@@ -245,7 +324,6 @@ public class ImServiceImpl implements ImService {
     @Override
     public long getUnreadCount(String entityType, String entityId, String userId) {
         if ("group".equals(entityType)) {
-            // 群聊：根据已读标记统计未读数
             String groupId = entityId.startsWith("team:") ? entityId.substring(5) : entityId;
             GroupChatReadMarkerEntity marker = groupChatReadMarkerMapper.selectOne(
                     Wrappers.<GroupChatReadMarkerEntity>lambdaQuery()
@@ -258,7 +336,6 @@ public class ImServiceImpl implements ImService {
                     .ne(ImMessageEntity::getSenderId, userId)
                     .gt(ImMessageEntity::getCreatedAt, lastReadAt));
         } else {
-            // 私聊：按 read_at 字段统计
             return imMessageMapper.selectCount(Wrappers.<ImMessageEntity>lambdaQuery()
                     .eq(ImMessageEntity::getEntityType, entityType)
                     .eq(ImMessageEntity::getEntityId, entityId)
@@ -271,14 +348,12 @@ public class ImServiceImpl implements ImService {
     public long getTotalUnreadCount(String userId) {
         long total = 0;
 
-        // 1. 私聊未读
         total += imMessageMapper.selectCount(Wrappers.<ImMessageEntity>lambdaQuery()
                 .eq(ImMessageEntity::getEntityType, "private")
                 .like(ImMessageEntity::getEntityId, "%" + userId + "%")
                 .ne(ImMessageEntity::getSenderId, userId)
                 .isNull(ImMessageEntity::getReadAt));
 
-        // 2. 群聊未读
         List<TeamMemberEntity> myTeams = teamMemberMapper.selectList(Wrappers.<TeamMemberEntity>lambdaQuery()
                 .eq(TeamMemberEntity::getUserId, userId));
         for (TeamMemberEntity teamMember : myTeams) {
@@ -289,9 +364,6 @@ public class ImServiceImpl implements ImService {
         return total;
     }
 
-    /**
-     * 从私聊 entity_id (格式 "userA:userB") 中提取对方用户ID
-     */
     private String getOtherUserId(String entityId, String myUserId) {
         String[] parts = entityId.split(":");
         if (parts.length == 2) {
